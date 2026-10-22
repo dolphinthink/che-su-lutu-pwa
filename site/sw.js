@@ -1,4 +1,4 @@
-const CACHE_NAME = "che-su-lutu-shell-v6";
+const CACHE_NAME = "che-su-lutu-shell-v7";
 const CORE_SHELL = [
   "./",
   "./index.html",

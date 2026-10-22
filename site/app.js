@@ -143,7 +143,10 @@
     const base = await response.json();
     const saved = await dbAll("spots").catch(() => []);
     const merged = new Map(base.map(spot => [spot.id || stableId(spot.lat, spot.lon), { ...spot, id: spot.id || stableId(spot.lat, spot.lon) }]));
-    for (const spot of saved) merged.set(spot.id, spot);
+    for (const spot of saved) {
+      const baseSpot = merged.get(spot.id);
+      merged.set(spot.id, baseSpot ? { ...baseSpot, ...spot, county: spot.county || baseSpot.county } : spot);
+    }
     spots = [...merged.values()].filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)));
     spots.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     await loadPartnerDirectory();
@@ -260,6 +263,10 @@
     return palette[code] || "#286859";
   }
 
+  function normalizeSearchText(value) {
+    return String(value ?? "").normalize("NFKC").replace(/台/g, "臺").toLocaleLowerCase("zh-Hant");
+  }
+
   function drawMapMarkers(filteredSpots = getFilteredSpots(false)) {
     if (!map || !markerLayer) return;
     markerLayer.clearLayers();
@@ -283,12 +290,12 @@
   }
 
   function getFilteredSpots(applyRadius = true) {
-    const query = $("#searchInput").value.trim().toLocaleLowerCase("zh-Hant");
+    const query = normalizeSearchText($("#searchInput").value.trim());
     const radiusValue = $("#radiusSelect").value;
     const favorites = $("#favoritesOnly").getAttribute("aria-pressed") === "true";
     let result = spots.filter(spot => {
       if (favorites && !favoriteIds.has(spot.id)) return false;
-      if (query && !`${spot.name} ${spot.lat} ${spot.lon} ${spot.hot || ""}`.toLocaleLowerCase("zh-Hant").includes(query)) return false;
+      if (query && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""}`).includes(query)) return false;
       if (applyRadius && radiusValue !== "all" && userPosition && haversineKm(userPosition, spot) > Number(radiusValue)) return false;
       return true;
     });
@@ -299,18 +306,30 @@
 
   function makeSpotCard(spot) {
     const distance = userPosition ? `<span class="badge">${haversineKm(userPosition, spot).toFixed(1)} 公里</span>` : "";
+    const county = spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : "";
     const hot = spot.hot !== "" && spot.hot != null ? `<span class="badge warm">熱水欄位 ${escapeHtml(spot.hot)}</span>` : "";
     const photo = spot.photo ? `<span class="badge">有圖片</span>` : "";
     const saved = favoriteIds.has(spot.id);
     return `<article class="spot-card" data-spot-card="${escapeHtml(spot.id)}">
       <div class="spot-card-head"><button class="spot-title" type="button" data-action="details" data-id="${escapeHtml(spot.id)}">${escapeHtml(spot.name)}</button><button class="favorite-button ${saved ? "saved" : ""}" type="button" data-action="favorite" data-id="${escapeHtml(spot.id)}" aria-label="${saved ? "取消收藏" : "收藏"}">${saved ? "♥" : "♡"}</button></div>
       <p class="spot-coords">${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${distance ? `　·　${distance.replace(/<[^>]*>/g, "")}` : ""}</p>
-      <div class="spot-badges">${hot}${photo}</div>
+      <div class="spot-badges">${county}${hot}${photo}</div>
       <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
     </article>`;
   }
 
-  function renderSpots() {
+  function focusMapOnSpots(filteredSpots) {
+    if (!map || !filteredSpots.length) return;
+    if (filteredSpots.length === 1) {
+      const spot = filteredSpots[0];
+      map.setView([Number(spot.lat), Number(spot.lon)], 12, { animate: false });
+      return;
+    }
+    const bounds = L.latLngBounds(filteredSpots.map(spot => [Number(spot.lat), Number(spot.lon)]));
+    if (bounds.isValid()) map.fitBounds(bounds.pad(0.12), { maxZoom: 11, animate: false });
+  }
+
+  function renderSpots(focusResults = false) {
     if (!spots.length) return;
     const results = getFilteredSpots();
     const countLabel = $("#resultCount");
@@ -320,6 +339,7 @@
     list.innerHTML = results.slice(0, visibleCount).map(makeSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的泊點</strong><p>試試不同關鍵字或放寬距離範圍。</p></div>`;
     $("#loadMore").hidden = results.length <= visibleCount;
     drawMapMarkers(results);
+    if (focusResults) focusMapOnSpots(results);
   }
 
   function partnerKind(item) {
@@ -401,7 +421,7 @@
     const hot = spot.hot !== "" && spot.hot != null ? `<span class="badge warm">熱水原始值：${escapeHtml(spot.hot)}</span>` : "";
     const photo = spot.photo ? `<img class="dialog-image" src="${escapeHtml(spot.photo)}" alt="${escapeHtml(spot.name)} 地圖圖片" loading="lazy">` : "";
     const content = $("#dialogContent");
-    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">車床天地公開總圖・泊點</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}</p><div class="dialog-badges">${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>泊點資訊</h3><p>本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。</p></div></div>`;
+    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">車床天地公開總圖・泊點</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>泊點資訊</h3><p>本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。</p></div></div>`;
     const dialog = $("#spotDialog");
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -859,8 +879,8 @@
     $("#partnerRegionSelect").addEventListener("change", () => { visiblePartnerCount = PARTNER_PAGE_SIZE; renderPartnerSpots(); });
     $("#partnerLoadMore").addEventListener("click", () => { visiblePartnerCount += PARTNER_PAGE_SIZE; renderPartnerSpots(); });
     $("#partnerFoodSearch").addEventListener("input", renderPartnerFoods);
-    $("#searchInput").addEventListener("input", () => { visibleCount = PAGE_SIZE; renderSpots(); });
-    $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; renderSpots(); $("#searchInput").focus(); });
+    $("#searchInput").addEventListener("input", () => { visibleCount = PAGE_SIZE; renderSpots(true); });
+    $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; renderSpots(true); $("#searchInput").focus(); });
     $("#sortSelect").addEventListener("change", renderSpots);
     $("#radiusSelect").addEventListener("change", () => {
       if ($("#radiusSelect").value !== "all" && !userPosition) locateUser().catch(error => notify(error.message));
