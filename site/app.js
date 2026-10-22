@@ -5,6 +5,7 @@
   const SPOT_DATA_URL = "./data/spots.json?v=20261022-6";
   const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-6";
   const WATERFRONT_DATA_URL = "./data/waterfront-points.json?v=20261022-6";
+  const FOOD_DATA_URL = "./data/restaurant-directory.json?v=20261022-7";
   const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
@@ -18,6 +19,7 @@
   let spots = [];
   let templeToiletData = null;
   let waterfrontData = null;
+  let foodDirectoryPromise;
   let partnerSpots = [];
   let partnerFoods = [];
   let visibleCount = PAGE_SIZE;
@@ -558,14 +560,53 @@
     return names[amenity] || amenity.replaceAll("_", " ");
   }
 
+  async function loadFoodDirectory() {
+    if (!foodDirectoryPromise) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      foodDirectoryPromise = fetch(new URL(FOOD_DATA_URL, document.baseURI), { signal: controller.signal })
+        .then(response => {
+          if (!response.ok) throw new Error(`觀光署餐飲目錄回應 HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(data => {
+          if (!Array.isArray(data.points)) throw new Error("觀光署餐飲目錄格式不正確。");
+          return data;
+        })
+        .catch(error => {
+          foodDirectoryPromise = null;
+          throw error;
+        }).finally(() => clearTimeout(timer));
+    }
+    return foodDirectoryPromise;
+  }
+
+  function normalizeDirectoryFoods(points, spot, radius) {
+    return (points || []).flatMap(point => {
+      const lat = Number(point.lat);
+      const lon = Number(point.lon);
+      if (!point.name || !Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+      const distance = haversineKm(spot, { lat, lon }) * 1000;
+      if (distance > radius) return [];
+      const address = [point.city, point.town, point.address].filter(Boolean).join(" ");
+      return [{
+        id: point.id,
+        name: point.name,
+        lat,
+        lon,
+        category: "觀光署登錄餐飲",
+        cuisine: "",
+        opening: point.opening || "",
+        address,
+        phone: point.phone || "",
+        distance,
+        source: "交通部觀光署"
+      }];
+    }).sort((a, b) => a.distance - b.distance).slice(0, 30);
+  }
+
   function foodQuery(lat, lon, radius) {
-    const latitudeDelta = radius / 110574;
-    const longitudeDelta = radius / (111320 * Math.cos(lat * Math.PI / 180));
-    const south = (lat - latitudeDelta).toFixed(6);
-    const west = (lon - longitudeDelta).toFixed(6);
-    const north = (lat + latitudeDelta).toFixed(6);
-    const east = (lon + longitudeDelta).toFixed(6);
-    return `[out:json][timeout:12];(nw["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](${south},${west},${north},${east}););out center qt 100;`;
+    return `[out:json][timeout:12];(nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](around:${Math.round(radius)},${Number(lat).toFixed(6)},${Number(lon).toFixed(6)}););out center qt 100;`;
   }
 
   function normalizeFoodElements(elements, spot, radius) {
@@ -580,9 +621,18 @@
       const id = `${name.toLocaleLowerCase("zh-Hant")}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
       const distance = haversineKm(spot, { lat, lon }) * 1000;
       if (distance > radius) continue;
-      if (!unique.has(id)) unique.set(id, { name, lat, lon, category: categorizeFood(tags), cuisine: tags.cuisine || "", opening: tags.opening_hours || "", distance });
+      if (!unique.has(id)) unique.set(id, { name, lat, lon, category: categorizeFood(tags), cuisine: tags.cuisine || "", opening: tags.opening_hours || "", distance, source: "OpenStreetMap" });
     }
     return [...unique.values()].sort((a, b) => a.distance - b.distance).slice(0, 30);
+  }
+
+  function mergeFoodResults(...groups) {
+    const result = [];
+    for (const food of groups.flat().sort((a, b) => a.distance - b.distance)) {
+      const duplicate = result.some(item => normalizeSearchText(item.name) === normalizeSearchText(food.name) && haversineKm(item, food) <= 0.12);
+      if (!duplicate) result.push(food);
+    }
+    return result.slice(0, 30);
   }
 
   function showFoodStatus(title, body, fallbackLink = "") {
@@ -599,18 +649,21 @@
     return "目前無法連線至附近店家服務";
   }
 
-  function renderFoodResults(foods, spot, radius, staleAt = 0) {
+  function renderFoodResults(foods, spot, radius, options = {}) {
+    const { staleAt = 0, message = "", directorySource = "" } = typeof options === "number" ? { staleAt: options } : options;
     if (!foods.length) {
       showFoodStatus("附近沒有找到已命名店家", "可改用 Google 地圖查看附近餐廳，或擴大搜尋半徑。", googleSearchUrl("餐廳", spot.lat, spot.lon, "near"));
       return;
     }
     const cards = foods.map(food => {
-      const detail = [food.category, food.cuisine ? `料理：${food.cuisine}` : "", food.opening ? `營業時間：${food.opening}` : ""].filter(Boolean).join(" · ");
+      const detail = [food.category, food.cuisine ? `料理：${food.cuisine}` : "", food.opening ? `營業時間：${food.opening}` : "", food.address ? `地址：${food.address}` : ""].filter(Boolean).join(" · ");
       const url = googleSearchUrl(food.name, food.lat, food.lon, "評價");
       return `<article class="food-result-card"><div><h3>${escapeHtml(food.name)}</h3><p>${escapeHtml(detail)}</p><div class="food-radius">距離泊點約 ${food.distance < 1000 ? `${Math.round(food.distance)} 公尺` : `${(food.distance / 1000).toFixed(1)} 公里`}</div></div><a class="food-link" href="${url}" target="_blank" rel="noopener">Google 評價 ↗</a></article>`;
     }).join("");
     const staleMessage = staleAt ? `<p class="data-source-hint">附近查詢逾時，先顯示上次成功資料（${new Date(staleAt).toLocaleString("zh-TW")}）。</p>` : "";
-    $("#foodResults").innerHTML = `${staleMessage}<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${foods.length} 個有名稱的餐飲點 · OpenStreetMap 資料</p>${cards}<p class="data-source-hint">地圖資料可能不完整或過期；Google 地圖中的營業時間與評價由 Google 顯示。</p>`;
+    const sources = [...new Set([directorySource, ...foods.map(food => food.source)].filter(Boolean))].join("、") || "OpenStreetMap";
+    const updateMessage = message ? `<p class="data-source-hint">${escapeHtml(message)}</p>` : "";
+    $("#foodResults").innerHTML = `${updateMessage}${staleMessage}<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${foods.length} 個餐飲點 · ${escapeHtml(sources)}</p>${cards}<p class="data-source-hint">餐飲目錄可能不完整或延遲更新；Google 地圖連結可查看介紹、營業資訊與評價。</p>`;
   }
 
   async function fetchFoodFromEndpoint(endpoint, query, signal) {
@@ -646,15 +699,47 @@
     const radius = Number($("#foodRadius").value);
     const key = `${spot.id}_${radius}`;
     const googleNearby = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`餐廳 near ${spot.lat},${spot.lon}`)}`;
-    const cached = await dbGet("food", key).catch(() => null);
-    if (cached && Date.now() - cached.savedAt < FOOD_TTL) return renderFoodResults(cached.items, spot, radius);
-    if (!navigator.onLine) return showFoodStatus("目前離線", "先前搜尋過的店家會保存在本機；重新連線後可再次查詢。", googleNearby);
     foodRequestInProgress = true;
     $("#searchFoodButton").disabled = true;
     $("#searchFoodButton").textContent = "搜尋中…";
-    showFoodStatus("正在查詢附近店家", "資料來自 OpenStreetMap 社群地圖。", googleNearby);
-    let data;
+    showFoodStatus("正在載入附近餐飲", "先讀取已下載的餐飲目錄，再嘗試更新地圖資料。", googleNearby);
+    let fallbackFoods = [];
+    let fallbackOptions = {};
     try {
+      const [cachedResult, directoryResult] = await Promise.allSettled([
+        dbGet("food", key),
+        loadFoodDirectory()
+      ]);
+      const cached = cachedResult.status === "fulfilled" ? cachedResult.value : null;
+      const directory = directoryResult.status === "fulfilled" ? directoryResult.value : null;
+      const directoryFoods = normalizeDirectoryFoods(directory?.points, spot, radius);
+      const cachedFoods = cached?.items || [];
+      const hasFreshCache = cached && Date.now() - cached.savedAt < FOOD_TTL;
+      let visibleFoods = mergeFoodResults(directoryFoods, cachedFoods);
+      const directorySource = directory ? "交通部觀光署" : "";
+      fallbackFoods = visibleFoods;
+      fallbackOptions = { staleAt: cached?.savedAt || 0, directorySource };
+
+      if (hasFreshCache) {
+        renderFoodResults(visibleFoods, spot, radius, { directorySource });
+        return;
+      }
+      if (!navigator.onLine) {
+        if (visibleFoods.length) {
+          renderFoodResults(visibleFoods, spot, radius, { staleAt: cached?.savedAt || 0, directorySource, message: "目前離線，顯示本機餐飲目錄與先前查詢資料。" });
+        } else {
+          showFoodStatus("目前離線", "先前搜尋過的店家會保存在本機；重新連線後可再次查詢。", googleNearby);
+        }
+        return;
+      }
+      if (visibleFoods.length) {
+        fallbackOptions.message = "即時地圖查詢尚未完成，先顯示餐飲目錄與上次查詢資料。";
+        renderFoodResults(visibleFoods, spot, radius, { ...fallbackOptions, message: "已先顯示餐飲目錄，正在背景更新附近地圖資料…" });
+      } else {
+        showFoodStatus("正在查詢附近店家", "目前沒有目錄店家，正在更新 OpenStreetMap 社群地圖。", googleNearby);
+      }
+
+      let data;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 26000);
       try {
@@ -676,9 +761,16 @@
       }
       const items = normalizeFoodElements(data.elements, spot, radius);
       await dbPut("food", { key, items, savedAt: Date.now() }).catch(() => {});
-      renderFoodResults(items, spot, radius);
+      visibleFoods = mergeFoodResults(directoryFoods, items);
+      renderFoodResults(visibleFoods, spot, radius, { directorySource });
     } catch (error) {
-      if (cached?.items?.length) return renderFoodResults(cached.items, spot, radius, cached.savedAt);
+      if (fallbackFoods.length) {
+        renderFoodResults(fallbackFoods, spot, radius, {
+          ...fallbackOptions,
+          message: `${foodErrorTitle(error)}，仍顯示可用的目錄／上次查詢資料。`
+        });
+        return;
+      }
       showFoodStatus(foodErrorTitle(error), "店家資料服務可能暫時忙碌或網路連線不穩；可稍後重試，也可直接用 Google 地圖搜尋附近餐廳與評價。", googleNearby);
     } finally {
       foodRequestInProgress = false;

@@ -19,13 +19,7 @@ function boundedCoordinate(value, min, max) {
 }
 
 function buildQuery(lat, lon, radiusM) {
-  const latitudeDelta = radiusM / 110574;
-  const longitudeDelta = radiusM / (111320 * Math.cos(lat * Math.PI / 180));
-  const south = (lat - latitudeDelta).toFixed(6);
-  const west = (lon - longitudeDelta).toFixed(6);
-  const north = (lat + latitudeDelta).toFixed(6);
-  const east = (lon + longitudeDelta).toFixed(6);
-  return `[out:json][timeout:10];(nw["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](${south},${west},${north},${east}););out center qt 100;`;
+  return `[out:json][timeout:10];(nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](around:${Math.round(radiusM)},${lat.toFixed(6)},${lon.toFixed(6)}););out center qt 100;`;
 }
 
 async function fetchUpstream(query) {
