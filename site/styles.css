@@ -10,3 +10,7 @@
 @media(max-width:650px){.partner-filter-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}.partner-filter-row .result-count{grid-column:1/-1;text-align:right}.partner-filter-row .select-wrap select{max-width:90px}.partner-grid{grid-template-columns:1fr;gap:8px}.partner-card{padding:12px}.partner-notice{padding:14px}.partner-source-line{align-items:flex-start;flex-direction:column;gap:5px}.partner-food-directory{margin-top:27px}.food-partner-search{max-width:none}.partner-food-card{align-items:flex-start}.partner-food-card .food-link{font-size:9px;padding:7px 8px}}
 
 .toilet-badge{background:#e4f1ee;color:#185c52;border-color:#c8dfd8}.dialog-section ul{margin:4px 0 10px;padding-left:18px}.dialog-section li{margin:4px 0;color:#718077;font-size:11px;line-height:1.5}
+
+.badge.waterfront-badge{background:#e8f0f7;color:#3278a8}
+
+\n.waterfront-filter[aria-pressed=true]{background:#e8f0f7;color:#3278a8;border-color:#cddde9}

@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261022-5"></script>
+  <script defer src="./app.js?v=20261022-6"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -53,6 +53,7 @@
           <label class="select-wrap"><span>排序</span><select id="sortSelect" aria-label="排序方式"><option value="near">由近到遠</option><option value="name">名稱</option></select></label>
           <button class="filter-chip" id="favoritesOnly" type="button" aria-pressed="false">♡ 收藏</button>
           <button class="filter-chip" id="templeFacilitiesToggle" type="button" aria-pressed="false" title="加入廟宇登記公廁位置；廁所開放時間及車泊許可需另確認">⛩ 廟宇公廁</button>
+          <button class="filter-chip waterfront-filter" id="waterfrontToggle" type="button" aria-pressed="false" title="搜尋溪、河、海周邊的公開泊點與官方景點；不以戲水條件篩選，停車及車宿規定請另確認">🌊 溪河海</button>
           <span class="result-count" id="resultCount">讀取資料中…</span>
         </div>
         <div id="dataLoadError" class="data-load-error" role="alert" hidden></div>
@@ -71,7 +72,7 @@
         <div class="section-heading"><div><h2>搜尋結果</h2><span id="listSubheading">可收藏常用泊點</span></div></div>
         <div class="spot-grid" id="spotList" aria-live="polite"></div>
         <button id="loadMore" class="button button-more" type="button" hidden>載入更多</button>
-        <p class="source-note">泊點來自車床天地公開總圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料，並標示 250 公尺內的交通、停車、公園、觀光、洽公、文化育樂及社福集會場所公廁。來源未標示沖水方式、開放時間或車泊許可，請出發前向管理單位確認。</p>
+        <p class="source-note">泊點來自車床天地公開總圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料；溪、河、海周邊點依泊點名稱和交通部觀光署公開座標整理。近水分類不代表車輛可開到水岸、可停車或允許過夜，也不以戲水條件篩選；請依現場標示及管理規定確認。<a href="https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction" target="_blank" rel="noopener">交通部觀光署資料來源 ↗</a></p>
       </section>
 
       <section class="view" id="view-partners" aria-labelledby="partnersTitle">

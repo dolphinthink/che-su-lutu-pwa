@@ -2,8 +2,9 @@
   "use strict";
 
   const DB_NAME = "che-su-lutu-v1";
-  const SPOT_DATA_URL = "./data/spots.json?v=20261022-5";
-  const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-5";
+  const SPOT_DATA_URL = "./data/spots.json?v=20261022-6";
+  const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-6";
+  const WATERFRONT_DATA_URL = "./data/waterfront-points.json?v=20261022-6";
   const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
@@ -16,6 +17,7 @@
   let dbPromise;
   let spots = [];
   let templeToiletData = null;
+  let waterfrontData = null;
   let partnerSpots = [];
   let partnerFoods = [];
   let visibleCount = PAGE_SIZE;
@@ -145,6 +147,8 @@
     const base = await response.json();
     const templeResponse = await fetch(new URL(TEMPLE_DATA_URL, document.baseURI)).catch(() => null);
     templeToiletData = templeResponse?.ok ? await templeResponse.json().catch(() => null) : null;
+    const waterfrontResponse = await fetch(new URL(WATERFRONT_DATA_URL, document.baseURI)).catch(() => null);
+    waterfrontData = waterfrontResponse?.ok ? await waterfrontResponse.json().catch(() => null) : null;
     const spotUpdates = new Map((templeToiletData?.spotUpdates || []).map(update => [update.id, update.toiletInfo]));
     const saved = await dbAll("spots").catch(() => []);
     const merged = new Map(base.map(spot => {
@@ -159,6 +163,20 @@
     for (const temple of templeToiletData?.temples || []) {
       if (temple.id && !merged.has(temple.id)) merged.set(temple.id, temple);
     }
+    for (const point of waterfrontData?.points || []) {
+      if (!point.id) continue;
+      const existing = merged.get(point.id);
+      merged.set(point.id, existing ? {
+        ...existing,
+        waterType: point.waterType,
+        waterLabel: point.waterLabel,
+        sourceType: point.sourceType,
+        accessEvidence: point.accessEvidence,
+        officialSourceUrl: point.officialSourceUrl,
+        officialSourceTitle: point.officialSourceTitle,
+        toiletInfo: existing.toiletInfo
+      } : point);
+    }
     spots = [...merged.values()].filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)));
     spots.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     const templeToggle = $("#templeFacilitiesToggle");
@@ -166,6 +184,12 @@
       const count = Number(templeToiletData?.counts?.templeSitesWithRegisteredRestrooms) || 0;
       templeToggle.textContent = `⛩ 廟宇公廁 ${count.toLocaleString("zh-TW")}`;
       templeToggle.disabled = !templeToiletData?.temples?.length;
+    }
+    const waterfrontToggle = $("#waterfrontToggle");
+    if (waterfrontToggle) {
+      const count = Number(waterfrontData?.counts?.total) || 0;
+      waterfrontToggle.textContent = `🌊 溪河海 ${count.toLocaleString("zh-TW")}`;
+      waterfrontToggle.disabled = !count;
     }
     await loadPartnerDirectory();
     fillSpotSelectors();
@@ -276,6 +300,9 @@
   }
 
   function markerColor(spot) {
+    if (spot.waterType === "sea") return "#3278a8";
+    if (spot.waterType === "river") return "#438b83";
+    if (spot.waterType === "creek") return "#7584b3";
     const code = (spot.style || "").match(/-([0-9A-F]{6})(?:-labelson)?$/i)?.[1]?.toUpperCase();
     const palette = { "DB4436": "#d84e3f", "E65100": "#df7c31", "673AB7": "#7760bd", "0F9D58": "#3f9870", "0288D1": "#428db8", "7CB342": "#82a943", "F9A825": "#d4a039", "000000": "#4b5c55" };
     return palette[code] || "#286859";
@@ -310,12 +337,15 @@
   function getFilteredSpots(applyRadius = true) {
     const query = normalizeSearchText($("#searchInput").value.trim());
     const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test(query);
+    const includeWaterfront = $("#waterfrontToggle")?.getAttribute("aria-pressed") === "true";
     const radiusValue = $("#radiusSelect").value;
     const favorites = $("#favoritesOnly").getAttribute("aria-pressed") === "true";
     let result = spots.filter(spot => {
       if (spot.category === "temple-restroom" && !includeTempleFacilities) return false;
+      if (spot.category === "waterfront" && !includeWaterfront) return false;
+      if (includeWaterfront && !spot.waterType) return false;
       if (favorites && !favoriteIds.has(spot.id)) return false;
-      if (query && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""}`).includes(query)) return false;
+      if (query && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""} ${spot.waterLabel || ""} ${spot.waterType || ""}`).includes(query)) return false;
       if (applyRadius && radiusValue !== "all" && userPosition && haversineKm(userPosition, spot) > Number(radiusValue)) return false;
       return true;
     });
@@ -336,11 +366,12 @@
         ? `<span class="badge toilet-badge">附近公廁 ${Number(toilet.nearby[0].distanceM).toLocaleString("zh-TW")} m</span>`
         : "";
     const categoryBadge = spot.category === "temple-restroom" ? `<span class="badge toilet-badge">廟宇公廁・非車泊點</span>` : "";
+    const waterBadge = spot.waterType ? `<span class="badge waterfront-badge">${spot.waterLabel || "近水點"}${spot.category === "waterfront" ? "・非車泊點" : ""}</span>` : "";
     const saved = favoriteIds.has(spot.id);
     return `<article class="spot-card" data-spot-card="${escapeHtml(spot.id)}">
       <div class="spot-card-head"><button class="spot-title" type="button" data-action="details" data-id="${escapeHtml(spot.id)}">${escapeHtml(spot.name)}</button><button class="favorite-button ${saved ? "saved" : ""}" type="button" data-action="favorite" data-id="${escapeHtml(spot.id)}" aria-label="${saved ? "取消收藏" : "收藏"}">${saved ? "♥" : "♡"}</button></div>
       <p class="spot-coords">${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${distance ? `　·　${distance.replace(/<[^>]*>/g, "")}` : ""}</p>
-      <div class="spot-badges">${county}${categoryBadge}${toiletBadge}${hot}${photo}</div>
+      <div class="spot-badges">${county}${categoryBadge}${waterBadge}${toiletBadge}${hot}${photo}</div>
       <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
     </article>`;
   }
@@ -361,10 +392,11 @@
     const results = getFilteredSpots();
     const countLabel = $("#resultCount");
     const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test($("#searchInput").value);
-    countLabel.textContent = `${results.length.toLocaleString("zh-TW")} 個${includeTempleFacilities ? "地點" : "泊點"}`;
+    const includeWaterfront = $("#waterfrontToggle")?.getAttribute("aria-pressed") === "true";
+    countLabel.textContent = `${results.length.toLocaleString("zh-TW")} 個${includeWaterfront || includeTempleFacilities ? "地點" : "泊點"}`;
     $("#listSubheading").textContent = userPosition ? "依距離排序；點位可直接開啟地圖和美食搜尋" : "可收藏常用泊點";
     const list = $("#spotList");
-    list.innerHTML = results.slice(0, visibleCount).map(makeSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的泊點</strong><p>試試不同關鍵字或放寬距離範圍。</p></div>`;
+    list.innerHTML = results.slice(0, visibleCount).map(makeSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的${includeWaterfront ? "近水地點" : "泊點"}</strong><p>試試不同關鍵字或放寬距離範圍。</p></div>`;
     $("#loadMore").hidden = results.length <= visibleCount;
     drawMapMarkers(results);
     if (focusResults) focusMapOnSpots(results);
@@ -459,8 +491,11 @@
     const spotDetails = spot.category === "temple-restroom"
       ? "這是廟宇登記公廁的位置，並非車宿泊點。廟方開放時間、訪客使用規定與停車／過夜許可須先向管理單位確認。"
       : "本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。";
+    const waterBadge = spot.waterType ? `<span class="badge waterfront-badge">${escapeHtml(spot.waterLabel || "近水點")}</span>` : "";
+    const waterSourceUrl = safeWebUrl(spot.officialSourceUrl);
+    const waterSection = spot.waterType ? `<div class="dialog-section"><h3>${escapeHtml(spot.waterLabel || "近水位置")}</h3><p>${escapeHtml(spot.accessEvidence || "依公開地圖名稱整理的水域附近線索；實際道路、步行距離與停車請現場確認。")}</p><p>此分類不判定是否可戲水，也不代表車輛可抵達水岸、可停車或允許車宿。</p>${waterSourceUrl ? `<a href="${escapeHtml(waterSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(spot.officialSourceTitle || "查看官方地點資料")} ↗</a>` : ""}</div>` : "";
     const content = $("#dialogContent");
-    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">${titleLabel}</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}${spot.address ? ` · ${escapeHtml(spot.address)}` : ""}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>${spot.category === "temple-restroom" ? "地點說明" : "泊點資訊"}</h3><p>${spotDetails}</p></div>${restroomSection}</div>`;
+    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">${titleLabel}</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}${spot.address ? ` · ${escapeHtml(spot.address)}` : ""}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${waterBadge}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>${spot.category === "temple-restroom" ? "地點說明" : spot.category === "waterfront" ? "近水景點資訊" : "泊點資訊"}</h3><p>${spotDetails}</p></div>${waterSection}${restroomSection}</div>`;
     const dialog = $("#spotDialog");
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -524,10 +559,16 @@
   }
 
   function foodQuery(lat, lon, radius) {
-    return `[out:json][timeout:25];(node["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"](around:${radius},${lat},${lon});way["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"](around:${radius},${lat},${lon});relation["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"](around:${radius},${lat},${lon}););out center 35;`;
+    const latitudeDelta = radius / 110574;
+    const longitudeDelta = radius / (111320 * Math.cos(lat * Math.PI / 180));
+    const south = (lat - latitudeDelta).toFixed(6);
+    const west = (lon - longitudeDelta).toFixed(6);
+    const north = (lat + latitudeDelta).toFixed(6);
+    const east = (lon + longitudeDelta).toFixed(6);
+    return `[out:json][timeout:12];(nw["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](${south},${west},${north},${east}););out center qt 100;`;
   }
 
-  function normalizeFoodElements(elements, spot) {
+  function normalizeFoodElements(elements, spot, radius) {
     const unique = new Map();
     for (const element of elements || []) {
       const tags = element.tags || {};
@@ -537,7 +578,9 @@
       const lon = Number(element.lon ?? element.center?.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
       const id = `${name.toLocaleLowerCase("zh-Hant")}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
-      if (!unique.has(id)) unique.set(id, { name, lat, lon, category: categorizeFood(tags), cuisine: tags.cuisine || "", opening: tags.opening_hours || "", distance: haversineKm(spot, { lat, lon }) * 1000 });
+      const distance = haversineKm(spot, { lat, lon }) * 1000;
+      if (distance > radius) continue;
+      if (!unique.has(id)) unique.set(id, { name, lat, lon, category: categorizeFood(tags), cuisine: tags.cuisine || "", opening: tags.opening_hours || "", distance });
     }
     return [...unique.values()].sort((a, b) => a.distance - b.distance).slice(0, 30);
   }
@@ -551,12 +594,12 @@
   }
 
   function foodErrorTitle(error) {
-    if (error?.status === 429 || error?.status === 406) return "附近店家服務忙碌";
+    if ([429, 406, 503].includes(error?.status)) return "附近店家服務忙碌";
     if (isFoodAbortError(error)) return "附近店家查詢逾時";
     return "目前無法連線至附近店家服務";
   }
 
-  function renderFoodResults(foods, spot, radius) {
+  function renderFoodResults(foods, spot, radius, staleAt = 0) {
     if (!foods.length) {
       showFoodStatus("附近沒有找到已命名店家", "可改用 Google 地圖查看附近餐廳，或擴大搜尋半徑。", googleSearchUrl("餐廳", spot.lat, spot.lon, "near"));
       return;
@@ -566,7 +609,8 @@
       const url = googleSearchUrl(food.name, food.lat, food.lon, "評價");
       return `<article class="food-result-card"><div><h3>${escapeHtml(food.name)}</h3><p>${escapeHtml(detail)}</p><div class="food-radius">距離泊點約 ${food.distance < 1000 ? `${Math.round(food.distance)} 公尺` : `${(food.distance / 1000).toFixed(1)} 公里`}</div></div><a class="food-link" href="${url}" target="_blank" rel="noopener">Google 評價 ↗</a></article>`;
     }).join("");
-    $("#foodResults").innerHTML = `<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${foods.length} 個有名稱的餐飲點 · OpenStreetMap 資料</p>${cards}<p class="data-source-hint">地圖資料可能不完整或過期；Google 地圖中的營業時間與評價由 Google 顯示。</p>`;
+    const staleMessage = staleAt ? `<p class="data-source-hint">附近查詢逾時，先顯示上次成功資料（${new Date(staleAt).toLocaleString("zh-TW")}）。</p>` : "";
+    $("#foodResults").innerHTML = `${staleMessage}<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${foods.length} 個有名稱的餐飲點 · OpenStreetMap 資料</p>${cards}<p class="data-source-hint">地圖資料可能不完整或過期；Google 地圖中的營業時間與評價由 Google 顯示。</p>`;
   }
 
   async function fetchFoodFromEndpoint(endpoint, query, signal) {
@@ -576,6 +620,17 @@
       body: `data=${encodeURIComponent(query)}`,
       signal
     });
+    if (!response.ok) {
+      const error = new Error(`附近店家服務回應 ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  }
+
+  async function fetchFoodFromProxy(spot, radius, signal) {
+    const params = new URLSearchParams({ lat: Number(spot.lat).toFixed(6), lon: Number(spot.lon).toFixed(6), radius: String(radius) });
+    const response = await fetch(`./api/food?${params}`, { signal, cache: "no-store", headers: { "Accept": "application/json" } });
     if (!response.ok) {
       const error = new Error(`附近店家服務回應 ${response.status}`);
       error.status = response.status;
@@ -598,33 +653,32 @@
     $("#searchFoodButton").disabled = true;
     $("#searchFoodButton").textContent = "搜尋中…";
     showFoodStatus("正在查詢附近店家", "資料來自 OpenStreetMap 社群地圖。", googleNearby);
-    const query = foodQuery(Number(spot.lat), Number(spot.lon), radius);
-    const endpoints = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
     let data;
-    let lastError;
     try {
-      for (const endpoint of endpoints) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 28000);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 26000);
+      try {
         try {
-          data = await fetchFoodFromEndpoint(endpoint, query, controller.signal);
-          break;
+          data = await fetchFoodFromProxy(spot, radius, controller.signal);
         } catch (error) {
-          lastError = error;
-          if (error.status === 429 || error.status === 406) {
-            const busyError = new Error("附近店家服務忙碌");
-            busyError.status = error.status;
-            throw busyError;
+          if (error.status !== 404 && error.status !== 405) throw error;
+          const query = foodQuery(Number(spot.lat), Number(spot.lon), radius);
+          const fallbackController = new AbortController();
+          const fallbackTimer = setTimeout(() => fallbackController.abort(), 8000);
+          try {
+            data = await fetchFoodFromEndpoint("https://overpass-api.de/api/interpreter", query, fallbackController.signal);
+          } finally {
+            clearTimeout(fallbackTimer);
           }
-        } finally {
-          clearTimeout(timer);
         }
+      } finally {
+        clearTimeout(timer);
       }
-      if (!data) throw lastError || new Error("附近店家服務暫時無法連線。");
-      const items = normalizeFoodElements(data.elements, spot);
+      const items = normalizeFoodElements(data.elements, spot, radius);
       await dbPut("food", { key, items, savedAt: Date.now() }).catch(() => {});
       renderFoodResults(items, spot, radius);
     } catch (error) {
+      if (cached?.items?.length) return renderFoodResults(cached.items, spot, radius, cached.savedAt);
       showFoodStatus(foodErrorTitle(error), "店家資料服務可能暫時忙碌或網路連線不穩；可稍後重試，也可直接用 Google 地圖搜尋附近餐廳與評價。", googleNearby);
     } finally {
       foodRequestInProgress = false;
@@ -932,6 +986,12 @@
       renderSpots();
     });
     $("#templeFacilitiesToggle").addEventListener("click", event => {
+      const active = event.currentTarget.getAttribute("aria-pressed") === "true";
+      event.currentTarget.setAttribute("aria-pressed", String(!active));
+      visibleCount = PAGE_SIZE;
+      renderSpots(true);
+    });
+    $("#waterfrontToggle").addEventListener("click", event => {
       const active = event.currentTarget.getAttribute("aria-pressed") === "true";
       event.currentTarget.setAttribute("aria-pressed", String(!active));
       visibleCount = PAGE_SIZE;
