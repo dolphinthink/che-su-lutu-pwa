@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#174d43">
+  <meta name="description" content="車泊點搜尋、附近美食、行程規劃與資料回報。">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>車宿旅圖｜泊點・美食・行程</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon-180.png">
+  <link rel="stylesheet" href="./assets/vendor/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./assets/vendor/leaflet.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#find" aria-label="車宿旅圖首頁">
+        <img src="./assets/icon.svg" alt="" width="42" height="42">
+        <span><strong>車宿旅圖</strong><small>泊點・美食・行程</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="network-state" id="networkState"><i></i>離線資料就緒</span>
+        <button class="icon-button install-button" id="installButton" type="button" hidden>安裝</button>
+      </div>
+    </header>
+
+    <nav class="main-nav" aria-label="主要功能">
+      <button class="nav-item active" type="button" data-tab="find"><span>⌖</span>找泊點</button>
+      <button class="nav-item" type="button" data-tab="partners"><span>⌂</span>特約</button>
+      <button class="nav-item" type="button" data-tab="plan"><span>➤</span>排行程</button>
+      <button class="nav-item" type="button" data-tab="food"><span>♨</span>附近美食</button>
+      <button class="nav-item" type="button" data-tab="updates"><span>＋</span>資料更新</button>
+    </nav>
+
+    <main>
+      <section class="view active" id="view-find" aria-labelledby="findTitle">
+        <div class="page-heading">
+          <div><p class="eyebrow">TAIWAN ROAD TRIP</p><h1 id="findTitle">找一個今晚的泊點</h1><p class="muted">搜尋 1,338 個不重複公開地圖泊點，也可依目前位置找附近選項。</p></div>
+          <button class="button button-light" id="locateButton" type="button"><span>◎</span>定位附近</button>
+        </div>
+        <div class="search-bar">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="搜尋地名、休息站或關鍵字" autocomplete="off">
+          <button id="clearSearch" class="clear-search" type="button" aria-label="清除搜尋">×</button>
+        </div>
+        <div class="filter-row">
+          <label class="select-wrap"><span>距離</span><select id="radiusSelect" aria-label="距離範圍"><option value="all">不限</option><option value="10">10 公里</option><option value="25">25 公里</option><option value="50">50 公里</option><option value="100">100 公里</option></select></label>
+          <label class="select-wrap"><span>排序</span><select id="sortSelect" aria-label="排序方式"><option value="near">由近到遠</option><option value="name">名稱</option></select></label>
+          <button class="filter-chip" id="favoritesOnly" type="button" aria-pressed="false">♡ 收藏</button>
+          <span class="result-count" id="resultCount">讀取資料中…</span>
+        </div>
+        <div id="dataLoadError" class="data-load-error" role="alert" hidden></div>
+        <div class="map-card">
+          <div class="map-heading"><div><strong>泊點地圖</strong><span>點地圖標記查看資訊</span></div><button id="mapExpand" class="text-button" type="button">展開地圖</button></div>
+          <div class="map-viewport">
+            <div id="mapBase" aria-hidden="true"></div>
+            <div id="map" aria-label="泊點地圖"></div>
+            <div id="mapServiceNotice" class="map-service-notice" role="status" aria-live="polite" hidden>
+              <p id="mapServiceMessage">地圖底圖目前無法連線，泊點清單仍可使用。</p>
+              <div><button id="mapRetry" type="button">重試底圖</button><a id="mapOpenGoogle" href="https://www.google.com/maps/search/?api=1&query=%E8%BB%8A%E6%B3%8A%E9%BB%9E" target="_blank" rel="noopener">Google 地圖檢視 ↗</a></div>
+            </div>
+          </div>
+          <div class="map-footnote"><span>地圖底圖需連線；泊點資料可離線查詢。</span><a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">回報地圖問題</a></div>
+        </div>
+        <div class="section-heading"><div><h2>搜尋結果</h2><span id="listSubheading">可收藏常用泊點</span></div></div>
+        <div class="spot-grid" id="spotList" aria-live="polite"></div>
+        <button id="loadMore" class="button button-more" type="button" hidden>載入更多</button>
+        <p class="source-note">資料來自車床天地公開總圖的「泊點」圖層；開放、收費與設施狀態請出發前再向現場確認。</p>
+      </section>
+
+      <section class="view" id="view-partners" aria-labelledby="partnersTitle">
+        <div class="page-heading"><div><p class="eyebrow">COMMUNITY PARTNERS</p><h1 id="partnersTitle">社團特約棧點</h1><p class="muted">搜尋全台特約車泊、營地與住宿優惠，查看聯絡方式並開啟 Google 地圖。</p></div></div>
+        <div class="panel partner-notice"><strong>出發前先電話確認</strong><p id="partnerNoticeText">特約項目和價格來自社團表格，僅供會員參考；連續假日可能不適用優惠，請先向店家確認。</p><div class="partner-source-line"><a id="partnerSourceLink" href="https://docs.google.com/spreadsheets/d/18R0l9oKejZ0O8pzw9Nz0mREEcUW5x5eWIItBlyvEPfI/edit?gid=2120308638#gid=2120308638" target="_blank" rel="noopener">查看來源試算表 ↗</a><small id="partnerSourceMeta"></small></div></div>
+        <div class="partner-filter-row">
+          <label class="partner-search"><span aria-hidden="true">⌕</span><input id="partnerSearchInput" type="search" placeholder="搜尋棧點、縣市、行政區或優惠" autocomplete="off"></label>
+          <label class="select-wrap"><span>地區</span><select id="partnerRegionSelect" aria-label="特約地區"><option value="all">全台</option></select></label>
+          <span class="result-count" id="partnerCount">讀取特約資料中…</span>
+        </div>
+        <div id="partnerSpotList" class="partner-grid" aria-live="polite"></div>
+        <button id="partnerLoadMore" class="button button-more" type="button" hidden>載入更多特約棧點</button>
+        <p class="source-note">特約棧點尚未提供經緯度，因此不會出現在地圖標記或自動行程距離排序中；請用地圖連結確認位置與導航。</p>
+      </section>
+
+      <section class="view" id="view-plan" aria-labelledby="planTitle">
+        <div class="page-heading"><div><p class="eyebrow">SMART ROUTE</p><h1 id="planTitle">依需求排一趟車宿行程</h1><p class="muted">輸入天數、出發點和想去的地方，先排出每天的泊點建議。</p></div></div>
+        <form class="panel plan-form" id="planForm">
+          <label class="field"><span>用一句話描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：四天三夜，想走海線和溫泉，每天不要開太遠，從目前位置出發"></textarea><small>可輸入海邊、山區、溫泉、休息站等偏好。</small></label>
+          <div class="form-grid three-cols">
+            <label class="field"><span>行程天數</span><select id="daysInput"><option value="1">1 天</option><option value="2">2 天</option><option value="3" selected>3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option><option value="8">8 天</option><option value="9">9 天</option><option value="10">10 天</option><option value="11">11 天</option><option value="12">12 天</option><option value="13">13 天</option><option value="14">14 天</option></select></label>
+            <label class="field"><span>起點</span><select id="startSpot"><option value="current">目前位置（先定位）</option></select></label>
+            <label class="field"><span>每日直線距離上限</span><select id="maxKm"><option value="80">80 公里</option><option value="120">120 公里</option><option value="160" selected>160 公里</option><option value="220">220 公里</option><option value="300">300 公里</option><option value="500">不限制（500 公里）</option></select></label>
+          </div>
+          <fieldset class="preferences"><legend>想優先安排</legend>
+            <label><input type="checkbox" name="pref" value="sea">海邊／海線</label>
+            <label><input type="checkbox" name="pref" value="mountain">山區／森林</label>
+            <label><input type="checkbox" name="pref" value="spring">溫泉</label>
+            <label><input type="checkbox" name="pref" value="service">服務區／休息站</label>
+          </fieldset>
+          <button class="button button-primary button-wide" type="submit">規劃我的行程 <span>→</span></button>
+          <p class="form-disclaimer">行程依泊點名稱和座標估算直線距離，不等於道路里程；特約名錄未提供座標，尚未納入自動排序。設施、營業和車泊規定請另外確認。</p>
+        </form>
+        <div id="itinerary" class="itinerary" aria-live="polite"><div class="empty-state"><span class="empty-icon">✳</span><strong>你的行程會顯示在這裡</strong><p>先填寫天數和偏好，再按「規劃我的行程」。</p></div></div>
+      </section>
+
+      <section class="view" id="view-food" aria-labelledby="foodTitle">
+        <div class="page-heading"><div><p class="eyebrow">LOCAL FOOD</p><h1 id="foodTitle">泊點附近吃什麼</h1><p class="muted">查詢附近餐廳、咖啡店和小吃，再開 Google 地圖看地點介紹與評價。</p></div></div>
+        <div class="panel food-search-panel">
+          <label class="field"><span>選擇泊點</span><select id="foodSpotSelect"></select></label>
+          <div class="food-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="foodRadius"><option value="1000">1 公里</option><option value="2000" selected>2 公里</option><option value="5000">5 公里</option></select></label><button id="searchFoodButton" class="button button-primary" type="button">搜尋附近美食</button></div>
+          <p class="data-source-hint">店家資料由 OpenStreetMap 社群維護，完整度因地區而異。Google 評價連結會開啟地圖搜尋結果。</p>
+        </div>
+        <div id="foodResults" class="food-results"><div class="empty-state"><span class="empty-icon">♨</span><strong>選擇泊點開始搜尋</strong><p>附近店家搜尋需要網路連線。</p></div></div>
+        <div class="osm-credit">店家資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+        <section class="partner-food-directory" aria-labelledby="partnerFoodTitle">
+          <div class="section-heading"><div><h2 id="partnerFoodTitle">全台特約餐飲優惠</h2><span id="partnerFoodCount">讀取特約餐飲中…</span></div></div>
+          <label class="partner-search food-partner-search"><span aria-hidden="true">⌕</span><input id="partnerFoodSearch" type="search" placeholder="搜尋店名、地區或優惠" autocomplete="off"></label>
+          <div id="partnerFoodList" class="partner-food-list" aria-live="polite"></div>
+          <p class="data-source-hint">特約餐飲沒有距離座標，請依地區搜尋並先致電確認優惠；點 Google 地圖查看地點介紹與評價。</p>
+        </section>
+      </section>
+
+      <section class="view" id="view-updates" aria-labelledby="updatesTitle">
+        <div class="page-heading"><div><p class="eyebrow">COMMUNITY NOTES</p><h1 id="updatesTitle">更新泊點資料</h1><p class="muted">匯入更新後的 CSV，或先在這台裝置記錄現場回報。</p></div></div>
+        <div class="panel update-import">
+          <div class="panel-title"><span class="title-icon">⇧</span><div><h2>匯入泊點 CSV</h2><p>支援本專案欄位格式；匯入內容會新增或更新本機資料。</p></div></div>
+          <div class="button-row"><label class="button button-outline file-button">選擇 CSV 檔<input id="csvInput" type="file" accept=".csv,text/csv"></label><button id="exportCsvButton" class="button button-light" type="button">下載目前資料</button></div>
+          <p id="csvStatus" class="status-line" aria-live="polite">原始資料不會被覆寫，匯入結果保存在此瀏覽器。</p>
+        </div>
+        <div class="panel report-panel">
+          <div class="panel-title"><span class="title-icon">✎</span><div><h2>新增現場回報</h2><p>例如：位置已封閉、收費異動、設施更新或附近好店。</p></div></div>
+          <form id="reportForm">
+            <div class="form-grid two-cols">
+              <label class="field"><span>回報類型</span><select id="reportType"><option>泊點狀態</option><option>收費或規定</option><option>設施資訊</option><option>附近美食</option><option>位置修正</option><option>其他</option></select></label>
+              <label class="field"><span>相關泊點／地名</span><input id="reportPlace" type="text" list="spotNameOptions" placeholder="輸入名稱或從清單選擇" required><datalist id="spotNameOptions"></datalist></label>
+            </div>
+            <label class="field"><span>更新內容</span><textarea id="reportMessage" rows="4" placeholder="請描述你實際看到的狀況，並註明日期。" required></textarea></label>
+            <label class="field"><span>附上一張照片（選填）</span><input id="reportPhoto" type="file" accept="image/*"><small>照片會縮小後保存在本機回報資料中。</small></label>
+            <button class="button button-primary" type="submit">儲存回報</button>
+          </form>
+        </div>
+        <div class="panel report-panel">
+          <div class="panel-title"><span class="title-icon">⇄</span><div><h2>匯出或匯入回報檔</h2><p>回報目前只存在這台裝置；匯出 JSON 後可傳給其他人或留存。</p></div></div>
+          <div class="button-row"><button id="exportReportsButton" class="button button-outline" type="button">匯出回報 JSON</button><label class="button button-light file-button">匯入回報 JSON<input id="reportsInput" type="file" accept=".json,application/json"></label></div>
+          <div id="reportsList" class="reports-list"></div>
+        </div>
+        <p class="local-storage-note"><strong>同步說明：</strong>目前版本沒有連線到共用伺服器，新增回報會存在本機。若要讓所有使用者直接同步，需要再接上後端資料庫/API。</p>
+      </section>
+    </main>
+
+    <footer class="app-footer"><span>車宿旅圖 · 公開泊點＋社團特約資料整理版</span><a href="https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg" target="_blank" rel="noopener">來源地圖 ↗</a></footer>
+  </div>
+
+  <dialog id="spotDialog" class="spot-dialog">
+    <button class="dialog-close" id="dialogClose" type="button" aria-label="關閉">×</button>
+    <div id="dialogContent"></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
