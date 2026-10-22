@@ -2,7 +2,8 @@
   "use strict";
 
   const DB_NAME = "che-su-lutu-v1";
-  const SPOT_DATA_URL = "./data/spots.json?v=20261022-3";
+  const SPOT_DATA_URL = "./data/spots.json?v=20261022-5";
+  const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-5";
   const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
@@ -14,6 +15,7 @@
 
   let dbPromise;
   let spots = [];
+  let templeToiletData = null;
   let partnerSpots = [];
   let partnerFoods = [];
   let visibleCount = PAGE_SIZE;
@@ -141,14 +143,30 @@
       throw new Error(`泊點資料回應 HTTP ${response.status}。請確認部署內容包含 data/spots.json，且網址位於 PWA 專案根目錄。`);
     }
     const base = await response.json();
+    const templeResponse = await fetch(new URL(TEMPLE_DATA_URL, document.baseURI)).catch(() => null);
+    templeToiletData = templeResponse?.ok ? await templeResponse.json().catch(() => null) : null;
+    const spotUpdates = new Map((templeToiletData?.spotUpdates || []).map(update => [update.id, update.toiletInfo]));
     const saved = await dbAll("spots").catch(() => []);
-    const merged = new Map(base.map(spot => [spot.id || stableId(spot.lat, spot.lon), { ...spot, id: spot.id || stableId(spot.lat, spot.lon) }]));
+    const merged = new Map(base.map(spot => {
+      const id = spot.id || stableId(spot.lat, spot.lon);
+      const toiletInfo = spotUpdates.get(id);
+      return [id, { ...spot, id, ...(toiletInfo ? { toiletInfo } : {}) }];
+    }));
     for (const spot of saved) {
       const baseSpot = merged.get(spot.id);
       merged.set(spot.id, baseSpot ? { ...baseSpot, ...spot, county: spot.county || baseSpot.county } : spot);
     }
+    for (const temple of templeToiletData?.temples || []) {
+      if (temple.id && !merged.has(temple.id)) merged.set(temple.id, temple);
+    }
     spots = [...merged.values()].filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)));
     spots.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+    const templeToggle = $("#templeFacilitiesToggle");
+    if (templeToggle) {
+      const count = Number(templeToiletData?.counts?.templeSitesWithRegisteredRestrooms) || 0;
+      templeToggle.textContent = `⛩ 廟宇公廁 ${count.toLocaleString("zh-TW")}`;
+      templeToggle.disabled = !templeToiletData?.temples?.length;
+    }
     await loadPartnerDirectory();
     fillSpotSelectors();
     renderSpots();
@@ -271,7 +289,7 @@
     if (!map || !markerLayer) return;
     markerLayer.clearLayers();
     const renderer = L.canvas({ padding: 0.5 });
-    for (const spot of filteredSpots.slice(0, 1500)) {
+    for (const spot of filteredSpots.slice(0, 2500)) {
       const marker = L.circleMarker([Number(spot.lat), Number(spot.lon)], {
         renderer,
         radius: 5,
@@ -291,9 +309,11 @@
 
   function getFilteredSpots(applyRadius = true) {
     const query = normalizeSearchText($("#searchInput").value.trim());
+    const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test(query);
     const radiusValue = $("#radiusSelect").value;
     const favorites = $("#favoritesOnly").getAttribute("aria-pressed") === "true";
     let result = spots.filter(spot => {
+      if (spot.category === "temple-restroom" && !includeTempleFacilities) return false;
       if (favorites && !favoriteIds.has(spot.id)) return false;
       if (query && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""}`).includes(query)) return false;
       if (applyRadius && radiusValue !== "all" && userPosition && haversineKm(userPosition, spot) > Number(radiusValue)) return false;
@@ -309,11 +329,18 @@
     const county = spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : "";
     const hot = spot.hot !== "" && spot.hot != null ? `<span class="badge warm">熱水欄位 ${escapeHtml(spot.hot)}</span>` : "";
     const photo = spot.photo ? `<span class="badge">有圖片</span>` : "";
+    const toilet = spot.toiletInfo;
+    const toiletBadge = toilet?.status === "onsite"
+      ? `<span class="badge toilet-badge">廟宇登記公廁</span>`
+      : toilet?.nearby?.length
+        ? `<span class="badge toilet-badge">附近公廁 ${Number(toilet.nearby[0].distanceM).toLocaleString("zh-TW")} m</span>`
+        : "";
+    const categoryBadge = spot.category === "temple-restroom" ? `<span class="badge toilet-badge">廟宇公廁・非車泊點</span>` : "";
     const saved = favoriteIds.has(spot.id);
     return `<article class="spot-card" data-spot-card="${escapeHtml(spot.id)}">
       <div class="spot-card-head"><button class="spot-title" type="button" data-action="details" data-id="${escapeHtml(spot.id)}">${escapeHtml(spot.name)}</button><button class="favorite-button ${saved ? "saved" : ""}" type="button" data-action="favorite" data-id="${escapeHtml(spot.id)}" aria-label="${saved ? "取消收藏" : "收藏"}">${saved ? "♥" : "♡"}</button></div>
       <p class="spot-coords">${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${distance ? `　·　${distance.replace(/<[^>]*>/g, "")}` : ""}</p>
-      <div class="spot-badges">${county}${hot}${photo}</div>
+      <div class="spot-badges">${county}${categoryBadge}${toiletBadge}${hot}${photo}</div>
       <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
     </article>`;
   }
@@ -333,7 +360,8 @@
     if (!spots.length) return;
     const results = getFilteredSpots();
     const countLabel = $("#resultCount");
-    countLabel.textContent = `${results.length.toLocaleString("zh-TW")} 個泊點`;
+    const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test($("#searchInput").value);
+    countLabel.textContent = `${results.length.toLocaleString("zh-TW")} 個${includeTempleFacilities ? "地點" : "泊點"}`;
     $("#listSubheading").textContent = userPosition ? "依距離排序；點位可直接開啟地圖和美食搜尋" : "可收藏常用泊點";
     const list = $("#spotList");
     list.innerHTML = results.slice(0, visibleCount).map(makeSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的泊點</strong><p>試試不同關鍵字或放寬距離範圍。</p></div>`;
@@ -420,8 +448,19 @@
     const distance = userPosition ? `<span class="badge">距目前位置 ${haversineKm(userPosition, spot).toFixed(1)} 公里</span>` : "";
     const hot = spot.hot !== "" && spot.hot != null ? `<span class="badge warm">熱水原始值：${escapeHtml(spot.hot)}</span>` : "";
     const photo = spot.photo ? `<img class="dialog-image" src="${escapeHtml(spot.photo)}" alt="${escapeHtml(spot.name)} 地圖圖片" loading="lazy">` : "";
+    const toiletInfo = spot.toiletInfo;
+    const restroomLines = (toiletInfo?.restrooms || []).map(item => `<li>${escapeHtml(item.type || "登記公廁")}${item.grade ? ` · ${escapeHtml(item.grade)}` : ""}</li>`).join("");
+    const nearbyLines = (toiletInfo?.nearby || []).map(item => {
+      const url = googleSearchUrl(item.name, item.lat, item.lon);
+      return `<li><a href="${url}" target="_blank" rel="noopener">${escapeHtml(item.name)}</a> · ${Number(item.distanceM).toLocaleString("zh-TW")} 公尺${item.category ? ` · ${escapeHtml(item.category)}` : ""}${item.grade ? ` · ${escapeHtml(item.grade)}` : ""}</li>`;
+    }).join("");
+    const restroomSection = toiletInfo ? `<div class="dialog-section"><h3>${toiletInfo.status === "onsite" ? "廟宇登記公廁" : "附近登記公廁"}</h3>${restroomLines ? `<ul>${restroomLines}</ul>` : ""}${nearbyLines ? `<p>附近 250 公尺內：</p><ul>${nearbyLines}</ul>` : ""}<p>資料來自環境部全國公廁建檔資料；來源未標示沖水方式、即時開放時間或外來訪客是否可使用。車泊許可請另向管理單位確認。</p><a href="https://data.moenv.gov.tw/dataset/detail/FAC_P_07" target="_blank" rel="noopener">查看環境部資料來源 ↗</a></div>` : "";
+    const titleLabel = spot.category === "temple-restroom" ? "環境部公開資料・廟宇登記公廁（非車泊點）" : "車床天地公開總圖・泊點";
+    const spotDetails = spot.category === "temple-restroom"
+      ? "這是廟宇登記公廁的位置，並非車宿泊點。廟方開放時間、訪客使用規定與停車／過夜許可須先向管理單位確認。"
+      : "本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。";
     const content = $("#dialogContent");
-    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">車床天地公開總圖・泊點</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>泊點資訊</h3><p>本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。</p></div></div>`;
+    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">${titleLabel}</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}${spot.address ? ` · ${escapeHtml(spot.address)}` : ""}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>${spot.category === "temple-restroom" ? "地點說明" : "泊點資訊"}</h3><p>${spotDetails}</p></div>${restroomSection}</div>`;
     const dialog = $("#spotDialog");
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -598,6 +637,7 @@
     sea: /海邊|海線|海岸|海景|海濱|海水浴|沙灘|漁港|海$/i,
     mountain: /山區|山線|山景|森林|高山|林道|山莊|山屋|登山|山$/i,
     spring: /溫泉|泡湯|湯屋|風呂/i,
+    temple: /廟|寺|宮|堂|神社|祠|道觀|佛堂|天壇|壇|殿/i,
     service: /服務區|休息站|國道|交流道/i
   };
 
@@ -655,7 +695,7 @@
       $("#startSpot").focus();
       return;
     }
-    const unplanned = new Set(spots.map(spot => spot.id));
+    const unplanned = new Set(spots.filter(spot => spot.overnightEligible !== false).map(spot => spot.id));
     if (startingSpot) unplanned.delete(startingSpot.id);
     const itinerary = [];
     let routeOrigin = { ...current };
@@ -688,7 +728,7 @@
       root.innerHTML = `<div class="empty-state"><strong>目前沒有可安排的泊點</strong><p>調整起點或需求後再試一次。</p></div>`;
       return;
     }
-    const prefLabels = { sea: "海邊／海線", mountain: "山區／森林", spring: "溫泉", service: "服務區／休息站" };
+    const prefLabels = { sea: "海邊／海線", mountain: "山區／森林", spring: "溫泉", temple: "廟宇", service: "服務區／休息站" };
     const prefText = details.preferences.map(key => prefLabels[key]).join("、");
     const dayCards = items.map(item => {
       const hits = item.hits.length ? item.hits.map(key => `<span class="badge">符合${prefLabels[key]}</span>`).join("") : "";
@@ -890,6 +930,12 @@
       const active = event.currentTarget.getAttribute("aria-pressed") === "true";
       event.currentTarget.setAttribute("aria-pressed", String(!active));
       renderSpots();
+    });
+    $("#templeFacilitiesToggle").addEventListener("click", event => {
+      const active = event.currentTarget.getAttribute("aria-pressed") === "true";
+      event.currentTarget.setAttribute("aria-pressed", String(!active));
+      visibleCount = PAGE_SIZE;
+      renderSpots(true);
     });
     $("#locateButton").addEventListener("click", () => locateUser().catch(error => notify(error.message)));
     $("#loadMore").addEventListener("click", () => { visibleCount += PAGE_SIZE; renderSpots(); });

@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261022-3"></script>
+  <script defer src="./app.js?v=20261022-5"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -40,7 +40,7 @@
     <main>
       <section class="view active" id="view-find" aria-labelledby="findTitle">
         <div class="page-heading">
-          <div><p class="eyebrow">TAIWAN ROAD TRIP</p><h1 id="findTitle">找一個今晚的泊點</h1><p class="muted">搜尋 1,338 個不重複公開地圖泊點，也可依目前位置找附近選項。</p></div>
+          <div><p class="eyebrow">TAIWAN ROAD TRIP</p><h1 id="findTitle">找一個今晚的泊點</h1><p class="muted">搜尋 1,338 個公開地圖泊點；也可加入全台廟宇建檔公廁與附近公廁。</p></div>
           <button class="button button-light" id="locateButton" type="button"><span>◎</span>定位附近</button>
         </div>
         <div class="search-bar">
@@ -52,6 +52,7 @@
           <label class="select-wrap"><span>距離</span><select id="radiusSelect" aria-label="距離範圍"><option value="all">不限</option><option value="10">10 公里</option><option value="25">25 公里</option><option value="50">50 公里</option><option value="100">100 公里</option></select></label>
           <label class="select-wrap"><span>排序</span><select id="sortSelect" aria-label="排序方式"><option value="near">由近到遠</option><option value="name">名稱</option></select></label>
           <button class="filter-chip" id="favoritesOnly" type="button" aria-pressed="false">♡ 收藏</button>
+          <button class="filter-chip" id="templeFacilitiesToggle" type="button" aria-pressed="false" title="加入廟宇登記公廁位置；廁所開放時間及車泊許可需另確認">⛩ 廟宇公廁</button>
           <span class="result-count" id="resultCount">讀取資料中…</span>
         </div>
         <div id="dataLoadError" class="data-load-error" role="alert" hidden></div>
@@ -70,7 +71,7 @@
         <div class="section-heading"><div><h2>搜尋結果</h2><span id="listSubheading">可收藏常用泊點</span></div></div>
         <div class="spot-grid" id="spotList" aria-live="polite"></div>
         <button id="loadMore" class="button button-more" type="button" hidden>載入更多</button>
-        <p class="source-note">資料來自車床天地公開總圖的「泊點」圖層；開放、收費與設施狀態請出發前再向現場確認。</p>
+        <p class="source-note">泊點來自車床天地公開總圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料，並標示 250 公尺內的交通、停車、公園、觀光、洽公、文化育樂及社福集會場所公廁。來源未標示沖水方式、開放時間或車泊許可，請出發前向管理單位確認。</p>
       </section>
 
       <section class="view" id="view-partners" aria-labelledby="partnersTitle">
@@ -89,7 +90,7 @@
       <section class="view" id="view-plan" aria-labelledby="planTitle">
         <div class="page-heading"><div><p class="eyebrow">SMART ROUTE</p><h1 id="planTitle">依需求排一趟車宿行程</h1><p class="muted">輸入天數、出發點和想去的地方，先排出每天的泊點建議。</p></div></div>
         <form class="panel plan-form" id="planForm">
-          <label class="field"><span>用一句話描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：四天三夜，想走海線和溫泉，每天不要開太遠，從目前位置出發"></textarea><small>可輸入海邊、山區、溫泉、休息站等偏好。</small></label>
+          <label class="field"><span>用一句話描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：四天三夜，想走海線和溫泉，每天不要開太遠，從目前位置出發"></textarea><small>可輸入海邊、山區、溫泉、廟宇、休息站等偏好。</small></label>
           <div class="form-grid three-cols">
             <label class="field"><span>行程天數</span><select id="daysInput"><option value="1">1 天</option><option value="2">2 天</option><option value="3" selected>3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option><option value="8">8 天</option><option value="9">9 天</option><option value="10">10 天</option><option value="11">11 天</option><option value="12">12 天</option><option value="13">13 天</option><option value="14">14 天</option></select></label>
             <label class="field"><span>起點</span><select id="startSpot"><option value="current">目前位置（先定位）</option></select></label>
@@ -99,6 +100,7 @@
             <label><input type="checkbox" name="pref" value="sea">海邊／海線</label>
             <label><input type="checkbox" name="pref" value="mountain">山區／森林</label>
             <label><input type="checkbox" name="pref" value="spring">溫泉</label>
+            <label><input type="checkbox" name="pref" value="temple">廟宇</label>
             <label><input type="checkbox" name="pref" value="service">服務區／休息站</label>
           </fieldset>
           <button class="button button-primary button-wide" type="submit">規劃我的行程 <span>→</span></button>
