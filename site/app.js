@@ -943,11 +943,13 @@
   async function init() {
     bindEvents();
     setNetworkStatus();
+    // Register the offline shell before data requests so a slow mobile connection
+    // cannot leave an installed app without a Service Worker on first launch.
+    registerServiceWorker();
     initMap();
     await loadSpots();
     const requestedTab = location.hash.slice(1);
     if (["find", "partners", "plan", "food", "updates"].includes(requestedTab)) switchTab(requestedTab);
-    registerServiceWorker();
   }
 
   init().catch(error => {
