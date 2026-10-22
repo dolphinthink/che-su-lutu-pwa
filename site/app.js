@@ -2,7 +2,7 @@
   "use strict";
 
   const DB_NAME = "che-su-lutu-v1";
-  const SPOT_DATA_URL = "./data/spots.json";
+  const SPOT_DATA_URL = "./data/spots.json?v=20261022-2";
   const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
