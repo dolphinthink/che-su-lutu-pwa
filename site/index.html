@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261022-2"></script>
+  <script defer src="./app.js?v=20261022-3"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -111,7 +111,7 @@
         <div class="page-heading"><div><p class="eyebrow">LOCAL FOOD</p><h1 id="foodTitle">泊點附近吃什麼</h1><p class="muted">查詢附近餐廳、咖啡店和小吃，再開 Google 地圖看地點介紹與評價。</p></div></div>
         <div class="panel food-search-panel">
           <label class="field"><span>選擇泊點</span><select id="foodSpotSelect"></select></label>
-          <div class="food-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="foodRadius"><option value="1000">1 公里</option><option value="2000" selected>2 公里</option><option value="5000">5 公里</option></select></label><button id="searchFoodButton" class="button button-primary" type="button">搜尋附近美食</button></div>
+          <div class="food-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="foodRadius"><option value="1000">1 公里</option><option value="2000" selected>2 公里</option><option value="5000">5 公里</option><option value="10000">10 公里</option></select></label><button id="searchFoodButton" class="button button-primary" type="button">搜尋附近美食</button></div>
           <p class="data-source-hint">店家資料由 OpenStreetMap 社群維護，完整度因地區而異。Google 評價連結會開啟地圖搜尋結果。</p>
         </div>
         <div id="foodResults" class="food-results"><div class="empty-state"><span class="empty-icon">♨</span><strong>選擇泊點開始搜尋</strong><p>附近店家搜尋需要網路連線。</p></div></div>
