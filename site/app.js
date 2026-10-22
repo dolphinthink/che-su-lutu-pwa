@@ -9,6 +9,7 @@
   const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
+  const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
   const PAGE_SIZE = 36;
   const PARTNER_PAGE_SIZE = 18;
@@ -240,10 +241,15 @@
     loadMapBackground();
   }
 
+  function toMapLibreZoom(leafletZoom) {
+    // Leaflet uses 256 px world tiles; MapLibre vector styles use 512 px tiles.
+    return leafletZoom + MAPLIBRE_LEAFLET_ZOOM_OFFSET;
+  }
+
   function syncMapBackground() {
     if (!map || !mapBackground || !mapBackground.isStyleLoaded()) return;
     const center = map.getCenter();
-    mapBackground.jumpTo({ center: [center.lng, center.lat], zoom: map.getZoom() });
+    mapBackground.jumpTo({ center: [center.lng, center.lat], zoom: toMapLibreZoom(map.getZoom()) });
   }
 
   function showMapServiceNotice(message) {
@@ -274,7 +280,7 @@
         container: "mapBase",
         style: MAP_STYLE_URL,
         center: [map.getCenter().lng, map.getCenter().lat],
-        zoom: map.getZoom(),
+        zoom: toMapLibreZoom(map.getZoom()),
         interactive: false,
         attributionControl: false
       });
