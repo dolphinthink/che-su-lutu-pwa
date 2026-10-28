@@ -1656,7 +1656,16 @@
 
   async function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
-    try { await navigator.serviceWorker.register("./sw.js"); }
+    try {
+      const previousController = navigator.serviceWorker.controller;
+      if (previousController) {
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (navigator.serviceWorker.controller && navigator.serviceWorker.controller !== previousController) location.reload();
+        }, { once: true });
+      }
+      const registration = await navigator.serviceWorker.register("./sw.js");
+      await registration.update();
+    }
     catch { /* file:// 開啟或非安全連線時，瀏覽器不會啟用離線快取 */ }
   }
 
