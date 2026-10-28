@@ -1,9 +1,9 @@
-const CACHE_NAME = "che-su-lutu-shell-v24";
+const CACHE_NAME = "che-su-lutu-shell-v25";
 const CORE_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=20261028-10",
+  "./app.js?v=20261028-11",
   "./manifest.webmanifest"
 ];
 const OPTIONAL_SHELL = [
@@ -47,7 +47,7 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url);
   // Keep map tiles and external data services outside the app cache.
   if (url.origin !== self.location.origin) return;
-  // Food lookups are dynamic API results; IndexedDB keeps an expiring local copy.
+  // Nearby lookups are dynamic API results; IndexedDB keeps expiring local copies.
   if (url.pathname.includes("/api/")) return;
 
   if (request.mode === "navigate") {

@@ -56,7 +56,7 @@ for (const spot of spots) {
     waterType,
     waterLabel: waterLabel[waterType],
     sourceType: "vehicle-stay-map",
-    accessEvidence: official?.accessEvidence || "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。",
+    accessEvidence: official?.accessEvidence || "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。",
     ...(official ? { officialSourceUrl: official.url, officialSourceTitle: official.title } : {})
   });
 }
@@ -107,7 +107,7 @@ const points = [...pointsById.values()].sort((a, b) => a.name.localeCompare(b.na
 const output = {
   source: {
     fetchedOn: "2026-10-22",
-    mapSourceTitle: "車床天地公開總圖泊點標註",
+    mapSourceTitle: "公開總圖泊點標註",
     mapSourceUrl: "https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg",
     officialSourceTitle: "交通部觀光署觀光多媒體開放資料",
     officialPortalUrl: "https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction",

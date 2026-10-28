@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#174d43">
-  <meta name="description" content="車泊點搜尋、附近美食、行程規劃與資料回報。">
+  <meta name="description" content="車泊點搜尋、附近景點與美食、行程規劃和資料更新。">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>車宿旅圖｜泊點・美食・行程</title>
+  <title>車宿旅圖｜泊點・景點・美食・行程</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-180.png">
@@ -14,14 +14,14 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261028-10"></script>
+  <script defer src="./app.js?v=20261028-11"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="#find" aria-label="車宿旅圖首頁">
         <img src="./assets/icon.svg" alt="" width="42" height="42">
-        <span><strong>車宿旅圖</strong><small>泊點・美食・行程</small></span>
+        <span><strong>車宿旅圖</strong><small>泊點・景點・美食</small></span>
       </a>
       <div class="top-actions">
         <span class="network-state" id="networkState"><i></i>離線資料就緒</span>
@@ -32,6 +32,7 @@
     <nav class="main-nav" aria-label="主要功能">
       <button class="nav-item active" type="button" data-tab="find"><span>⌖</span>找泊點</button>
       <button class="nav-item" type="button" data-tab="plan"><span>➤</span>排行程</button>
+      <button class="nav-item" type="button" data-tab="attractions"><span>景</span>附近景點</button>
       <button class="nav-item" type="button" data-tab="food"><span>♨</span>附近美食</button>
       <button class="nav-item" type="button" data-tab="updates"><span>＋</span>資料更新</button>
     </nav>
@@ -72,7 +73,7 @@
         <div class="section-heading"><div><h2>搜尋結果</h2><span id="listSubheading">可收藏常用泊點</span></div></div>
         <div class="spot-grid" id="spotList" aria-live="polite"></div>
         <button id="loadMore" class="button button-more" type="button" hidden>載入更多</button>
-        <p class="source-note">泊點來自車床天地公開總圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料；溪、河、海周邊點依泊點名稱和交通部觀光署公開座標整理。近水分類不代表車輛可開到水岸、可停車或允許過夜，也不以戲水條件篩選；請依現場標示及管理規定確認。<a href="https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction" target="_blank" rel="noopener">交通部觀光署資料來源 ↗</a></p>
+        <p class="source-note">泊點來自公開地圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料；溪、河、海周邊點依泊點名稱和交通部觀光署公開座標整理。近水分類不代表車輛可開到水岸、可停車或允許過夜，也不以戲水條件篩選；請依現場標示及管理規定確認。<a href="https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction" target="_blank" rel="noopener">交通部觀光署資料來源 ↗</a></p>
       </section>
 
       <section class="view" id="view-plan" aria-labelledby="planTitle">
@@ -108,10 +109,21 @@
         <div class="osm-credit">店家資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
       </section>
 
+      <section class="view" id="view-attractions" aria-labelledby="attractionTitle">
+        <div class="page-heading"><div><p class="eyebrow">NEARBY PLACES</p><h1 id="attractionTitle">泊點附近去哪裡</h1><p class="muted">搜尋泊點周邊的公園、觀景點、古蹟、博物館和自然景點。</p></div></div>
+        <div class="panel food-search-panel">
+          <label class="field"><span>選擇泊點</span><select id="attractionSpotSelect" aria-label="選擇泊點"></select></label>
+          <div class="food-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="attractionRadius" aria-label="景點搜尋半徑"><option value="1000">1 公里</option><option value="2000">2 公里</option><option value="5000" selected>5 公里</option><option value="10000">10 公里</option></select></label><button id="searchAttractionsButton" class="button button-primary" type="button">搜尋附近景點</button></div>
+          <p class="data-source-hint">只在按下搜尋時查詢 OpenStreetMap；結果依距離排序，可開啟 Google 地圖導航。</p>
+        </div>
+        <div id="attractionResults" class="food-results" aria-live="polite"><div class="empty-state"><span class="empty-icon">景</span><strong>選擇泊點開始搜尋</strong><p>搜尋附近景點需要網路連線。</p></div></div>
+        <div class="osm-credit">景點資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+      </section>
+
       <section class="view" id="view-updates" aria-labelledby="updatesTitle">
         <div class="page-heading"><div><p class="eyebrow">COMMUNITY NOTES</p><h1 id="updatesTitle">更新泊點資料</h1><p class="muted">可從來源地圖新增泊點、搜尋修改單筆資料、匯入 CSV 或記錄現場回報。</p></div></div>
         <div class="panel source-import-panel">
-          <div class="panel-title"><span class="title-icon">⇩</span><div><h2>從車床天地來源地圖新增泊點</h2><p>讀取來源地圖的「泊點」圖層，只列出目前資料沒有的項目。</p></div></div>
+          <div class="panel-title"><span class="title-icon">⇩</span><div><h2>從來源地圖新增泊點</h2><p>讀取來源地圖的「泊點」圖層，只列出目前資料沒有的項目。</p></div></div>
           <div class="button-row source-import-buttons">
             <button id="searchSourceSpotsButton" class="button button-primary" type="button">搜尋來源新增泊點</button>
             <label class="button button-light file-button">匯入來源 KML<input id="sourceKmlInput" type="file" accept=".kml,.xml,application/vnd.google-earth.kml+xml,text/xml,application/xml"></label>

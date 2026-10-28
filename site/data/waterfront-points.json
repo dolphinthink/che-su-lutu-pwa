@@ -1,7 +1,7 @@
 {
   "source": {
     "fetchedOn": "2026-10-22",
-    "mapSourceTitle": "車床天地公開總圖泊點標註",
+    "mapSourceTitle": "公開總圖泊點標註",
     "mapSourceUrl": "https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg",
     "officialSourceTitle": "交通部觀光署觀光多媒體開放資料",
     "officialPortalUrl": "https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction",
@@ -29,7 +29,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.049491_121.785566",
@@ -44,7 +44,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.669925_121.035727",
@@ -59,7 +59,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.659896_120.153870",
@@ -74,7 +74,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.178068_121.583149",
@@ -89,7 +89,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.943120_121.711340",
@@ -104,7 +104,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.965646_121.922791",
@@ -119,7 +119,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.074690_121.541101",
@@ -134,7 +134,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.860084_120.641114",
@@ -149,7 +149,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.114258_121.242617",
@@ -164,7 +164,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.891793_121.285184",
@@ -179,7 +179,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.883883_121.284825",
@@ -194,7 +194,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.941932_121.901648",
@@ -209,7 +209,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.894721_121.323701",
@@ -224,7 +224,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.883466_121.287068",
@@ -239,7 +239,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.783610_121.690700",
@@ -254,7 +254,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.783059_121.691680",
@@ -269,7 +269,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.512976_119.591080",
@@ -284,7 +284,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "21.986204_120.712316",
@@ -299,7 +299,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.235480_121.636742",
@@ -314,7 +314,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.831552_121.747047",
@@ -329,7 +329,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.576753_121.870254",
@@ -361,7 +361,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.222576_121.646912",
@@ -376,7 +376,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.812264_120.848570",
@@ -391,7 +391,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.969635_120.326448",
@@ -406,7 +406,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.669602_121.814961",
@@ -421,7 +421,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.868509_120.522886",
@@ -436,7 +436,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.012197_121.989986",
@@ -451,7 +451,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.012509_121.992153",
@@ -466,7 +466,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.098037_121.381097",
@@ -481,7 +481,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.920452_120.175242",
@@ -496,7 +496,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.160704_121.732710",
@@ -511,7 +511,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.164122_121.722588",
@@ -526,7 +526,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.648187_120.770836",
@@ -541,7 +541,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.988292_121.013562",
@@ -556,7 +556,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.337955_121.315213",
@@ -571,7 +571,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.080508_120.587605",
@@ -586,7 +586,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "waterfront-tourism-baishawan",
@@ -616,7 +616,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.492557_121.506202",
@@ -631,7 +631,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.104045_121.384972",
@@ -646,7 +646,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.174791_120.892526",
@@ -661,7 +661,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.475638_120.412516",
@@ -676,7 +676,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.524267_120.547184",
@@ -691,7 +691,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.116855_121.244157",
@@ -706,7 +706,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.488656_121.401476",
@@ -721,7 +721,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.094515_120.747976",
@@ -736,7 +736,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.774137_120.281750",
@@ -751,7 +751,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.936123_121.886435",
@@ -766,7 +766,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.785960_120.294750",
@@ -781,7 +781,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.362321_120.594068",
@@ -796,7 +796,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.412914_120.771266",
@@ -811,7 +811,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.698385_121.191279",
@@ -826,7 +826,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.922678_120.311753",
@@ -841,7 +841,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.313239_121.457678",
@@ -856,7 +856,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.847093_121.550658",
@@ -871,7 +871,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.281137_120.890204",
@@ -886,7 +886,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.120883_121.888360",
@@ -901,7 +901,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.848962_120.928010",
@@ -916,7 +916,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.135147_121.362942",
@@ -931,7 +931,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.652102_120.441941",
@@ -946,7 +946,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.075230_121.560761",
@@ -961,7 +961,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.459100_120.647268",
@@ -976,7 +976,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.778650_120.914455",
@@ -991,7 +991,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.071462_121.716565",
@@ -1006,7 +1006,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.582203_120.141730",
@@ -1021,7 +1021,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.090024_120.715373",
@@ -1036,7 +1036,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.764512_120.903346",
@@ -1051,7 +1051,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.764454_120.905638",
@@ -1066,7 +1066,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.497376_121.842174",
@@ -1081,7 +1081,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.080104_121.166556",
@@ -1096,7 +1096,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.753121_121.164646",
@@ -1111,7 +1111,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.210572_120.088095",
@@ -1126,7 +1126,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.620230_121.287043",
@@ -1141,7 +1141,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.293402_120.524037",
@@ -1156,7 +1156,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.183504_121.411408",
@@ -1171,7 +1171,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.496963_120.676503",
@@ -1186,7 +1186,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.726839_120.464288",
@@ -1201,7 +1201,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.822819_120.910339",
@@ -1216,7 +1216,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.260940_120.650638",
@@ -1231,7 +1231,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "waterfront-tourism-huazhong-riverside",
@@ -1261,7 +1261,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.531755_120.655522",
@@ -1276,7 +1276,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.933209_120.176258",
@@ -1291,7 +1291,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.117910_121.861567",
@@ -1306,7 +1306,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.125830_120.437960",
@@ -1321,7 +1321,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.525744_119.567518",
@@ -1336,7 +1336,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.849806_120.929003",
@@ -1351,7 +1351,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.820563_120.993192",
@@ -1366,7 +1366,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.606798_121.747198",
@@ -1381,7 +1381,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.188021_120.690238",
@@ -1396,7 +1396,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.550105_120.672970",
@@ -1411,7 +1411,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.664502_120.688662",
@@ -1426,7 +1426,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.784123_120.495371",
@@ -1441,7 +1441,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.608910_120.268686",
@@ -1456,7 +1456,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "21.957542_120.839693",
@@ -1471,7 +1471,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.980988_120.155713",
@@ -1486,7 +1486,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.196929_121.689137",
@@ -1501,7 +1501,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.002529_121.929973",
@@ -1516,7 +1516,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.858798_120.942351",
@@ -1531,7 +1531,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.156017_120.455087",
@@ -1546,7 +1546,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.695100_120.755950",
@@ -1561,7 +1561,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.964786_121.536038",
@@ -1576,7 +1576,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "21.949637_120.784712",
@@ -1591,7 +1591,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.819006_120.999363",
@@ -1606,7 +1606,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.149795_121.443859",
@@ -1621,7 +1621,7 @@
       "waterType": "river",
       "waterLabel": "河邊／河岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.565281_119.682420",
@@ -1636,7 +1636,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.023702_121.936662",
@@ -1651,7 +1651,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.112091_121.914025",
@@ -1666,7 +1666,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.699751_120.858276",
@@ -1681,7 +1681,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.760920_120.234315",
@@ -1696,7 +1696,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.700922_121.549525",
@@ -1728,7 +1728,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.813843_121.759408",
@@ -1743,7 +1743,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.833108_121.772118",
@@ -1758,7 +1758,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.792450_121.739904",
@@ -1773,7 +1773,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "24.849481_121.550207",
@@ -1788,7 +1788,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "25.026227_121.823022",
@@ -1803,7 +1803,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "22.932987_120.592621",
@@ -1818,7 +1818,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.183081_121.291912",
@@ -1833,7 +1833,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.892165_121.603739",
@@ -1848,7 +1848,7 @@
       "waterType": "sea",
       "waterLabel": "海邊／海岸",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.568646_119.562431",
@@ -1863,7 +1863,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     },
     {
       "id": "23.994279_121.033161",
@@ -1878,7 +1878,7 @@
       "waterType": "creek",
       "waterLabel": "溪邊／溪谷",
       "sourceType": "vehicle-stay-map",
-      "accessEvidence": "沿用車床天地公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
+      "accessEvidence": "沿用公開地圖標註座標；此座標只代表點位附近，不保證車輛能直達水岸、可停車或可過夜。"
     }
   ]
 }

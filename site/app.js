@@ -12,6 +12,7 @@
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
   const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
+  const ATTRACTION_TTL = 6 * 60 * 60 * 1000;
   const PAGE_SIZE = 36;
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -31,6 +32,7 @@
   let installPrompt = null;
   let toastTimer;
   let foodRequestInProgress = false;
+  let attractionRequestInProgress = false;
   let selectedSpotUpdateId = null;
   let sourceSpots = [];
   let sourceSpotsReady = false;
@@ -51,12 +53,13 @@
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
       if (!("indexedDB" in window)) return reject(new Error("此瀏覽器不支援本機資料庫。"));
-      const request = indexedDB.open(DB_NAME, 1);
+      const request = indexedDB.open(DB_NAME, 2);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains("spots")) db.createObjectStore("spots", { keyPath: "id" });
         if (!db.objectStoreNames.contains("reports")) db.createObjectStore("reports", { keyPath: "id" });
         if (!db.objectStoreNames.contains("food")) db.createObjectStore("food", { keyPath: "key" });
+        if (!db.objectStoreNames.contains("attractions")) db.createObjectStore("attractions", { keyPath: "key" });
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error("無法開啟本機資料庫。"));
@@ -449,7 +452,7 @@
       <div class="spot-card-head"><button class="spot-title" type="button" data-action="details" data-id="${escapeHtml(spot.id)}">${escapeHtml(spot.name)}</button><button class="favorite-button ${saved ? "saved" : ""}" type="button" data-action="favorite" data-id="${escapeHtml(spot.id)}" aria-label="${saved ? "取消收藏" : "收藏"}">${saved ? "♥" : "♡"}</button></div>
       <p class="spot-coords">${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${distance ? `　·　${distance.replace(/<[^>]*>/g, "")}` : ""}</p>
       <div class="spot-badges">${county}${categoryBadge}${waterBadge}${toiletBadge}${hot}${photo}</div>
-      <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
+      <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="attractions" data-id="${escapeHtml(spot.id)}">附近景點</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
     </article>`;
   }
 
@@ -496,6 +499,10 @@
     const previousFood = food.value;
     food.innerHTML = sorted.map(optionText).join("");
     if (previousFood && [...food.options].some(option => option.value === previousFood)) food.value = previousFood;
+    const attraction = $("#attractionSpotSelect");
+    const previousAttraction = attraction.value;
+    attraction.innerHTML = sorted.map(optionText).join("");
+    if (previousAttraction && [...attraction.options].some(option => option.value === previousAttraction)) attraction.value = previousAttraction;
     const datalist = $("#spotNameOptions");
     datalist.innerHTML = sorted.map(spot => `<option value="${escapeHtml(spot.name)}"></option>`).join("");
   }
@@ -625,7 +632,7 @@
       }
       const style = metadata.style || directKmlChildText(placemark, "styleUrl").replace(/^#/, "");
       const id = stableId(lat, lon);
-      byId.set(id, { id, name, lat, lon, hot: metadata.hot, photo, style, source: "車床天地公開總圖" });
+      byId.set(id, { id, name, lat, lon, hot: metadata.hot, photo, style, source: "公開總圖" });
     }
     if (!byId.size) throw new Error("在「泊點」圖層中沒有讀到有效座標點。");
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
@@ -664,7 +671,7 @@
     const button = $("#searchSourceSpotsButton");
     button.disabled = true;
     button.textContent = "正在讀取來源…";
-    $("#sourceSpotStatus").textContent = "正在向車床天地公開總圖讀取最新泊點資料…";
+    $("#sourceSpotStatus").textContent = "正在向公開總圖讀取最新泊點資料…";
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -770,7 +777,7 @@
       return `<li><a href="${url}" target="_blank" rel="noopener">${escapeHtml(item.name)}</a> · ${Number(item.distanceM).toLocaleString("zh-TW")} 公尺${item.category ? ` · ${escapeHtml(item.category)}` : ""}${item.grade ? ` · ${escapeHtml(item.grade)}` : ""}</li>`;
     }).join("");
     const restroomSection = toiletInfo ? `<div class="dialog-section"><h3>${toiletInfo.status === "onsite" ? "廟宇登記公廁" : "附近登記公廁"}</h3>${restroomLines ? `<ul>${restroomLines}</ul>` : ""}${nearbyLines ? `<p>附近 250 公尺內：</p><ul>${nearbyLines}</ul>` : ""}<p>資料來自環境部全國公廁建檔資料；來源未標示沖水方式、即時開放時間或外來訪客是否可使用。車泊許可請另向管理單位確認。</p><a href="https://data.moenv.gov.tw/dataset/detail/FAC_P_07" target="_blank" rel="noopener">查看環境部資料來源 ↗</a></div>` : "";
-    const titleLabel = spot.category === "temple-restroom" ? "環境部公開資料・廟宇登記公廁（非車泊點）" : "車床天地公開總圖・泊點";
+    const titleLabel = spot.category === "temple-restroom" ? "環境部公開資料・廟宇登記公廁（非車泊點）" : "公開地圖・泊點";
     const spotDetails = spot.category === "temple-restroom"
       ? "這是廟宇登記公廁的位置，並非車宿泊點。廟方開放時間、訪客使用規定與停車／過夜許可須先向管理單位確認。"
       : "本地資料只包含名稱和座標等公開地圖欄位。地點是否開放車泊、費用和設施狀態請向場地確認。";
@@ -831,6 +838,11 @@
       $("#foodSpotSelect").value = id;
       switchTab("food");
       searchFood();
+    }
+    if (action === "attractions") {
+      $("#attractionSpotSelect").value = id;
+      switchTab("attractions");
+      searchNearbyAttractions();
     }
   }
 
@@ -1059,6 +1071,156 @@
     }
   }
 
+  function attractionQuery(lat, lon, radiusM) {
+    const radius = Math.round(radiusM);
+    const point = `${Number(lat).toFixed(6)},${Number(lon).toFixed(6)}`;
+    return `[out:json][timeout:15];(nwr["name"]["tourism"~"^(attraction|museum|viewpoint|theme_park|zoo|aquarium|gallery|artwork)$"](around:${radius},${point});nwr["name"]["historic"](around:${radius},${point});nwr["name"]["leisure"~"^(park|garden|nature_reserve)$"](around:${radius},${point});nwr["name"]["natural"~"^(peak|waterfall|cave_entrance|hot_spring|beach)$"](around:${radius},${point}););out center qt 120;`;
+  }
+
+  function attractionCategory(tags) {
+    const tourism = {
+      attraction: "觀光景點", museum: "博物館", viewpoint: "觀景點", theme_park: "主題樂園",
+      zoo: "動物園", aquarium: "水族館", gallery: "美術館／畫廊", artwork: "公共藝術"
+    };
+    const historic = {
+      castle: "古堡", archaeological_site: "考古遺址", monument: "紀念碑", memorial: "紀念地",
+      ruins: "遺跡", fort: "古城／要塞", manor: "歷史建築"
+    };
+    const leisure = { park: "公園", garden: "庭園", nature_reserve: "自然保護區" };
+    const natural = { peak: "山峰", waterfall: "瀑布", cave_entrance: "洞穴", hot_spring: "溫泉", beach: "海灘" };
+    if (tags.tourism) return tourism[tags.tourism] || "觀光景點";
+    if (tags.historic) return historic[tags.historic] || "歷史景點";
+    if (tags.leisure) return leisure[tags.leisure] || "休閒景點";
+    if (tags.natural) return natural[tags.natural] || "自然景點";
+    return "景點";
+  }
+
+  function normalizeAttractionElements(elements, spot, radius) {
+    const results = [];
+    for (const element of Array.isArray(elements) ? elements : []) {
+      const tags = element.tags || {};
+      const lat = Number(element.lat ?? element.center?.lat);
+      const lon = Number(element.lon ?? element.center?.lon);
+      const name = String(tags["name:zh-TW"] || tags["name:zh"] || tags.name || "").trim();
+      if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const distance = haversineKm(spot, { lat, lon }) * 1000;
+      if (distance > radius) continue;
+      const normalizedName = normalizeSearchText(name);
+      if (results.some(item => normalizeSearchText(item.name) === normalizedName && haversineKm(item, { lat, lon }) * 1000 <= 120)) continue;
+      const address = tags["addr:full"] || [tags["addr:city"], tags["addr:district"] || tags["addr:suburb"], tags["addr:street"]].filter(Boolean).join("");
+      results.push({
+        name,
+        lat,
+        lon,
+        category: attractionCategory(tags),
+        address,
+        opening: tags.opening_hours || "",
+        distance,
+        source: "OpenStreetMap"
+      });
+    }
+    return results.sort((a, b) => a.distance - b.distance).slice(0, 80);
+  }
+
+  function showAttractionStatus(title, body, fallbackLink = "") {
+    $("#attractionResults").innerHTML = `<div class="empty-state"><span class="empty-icon">景</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p>${fallbackLink ? `<p><a class="button button-light" href="${escapeHtml(fallbackLink)}" target="_blank" rel="noopener">用 Google 地圖搜尋附近景點 ↗</a></p>` : ""}</div>`;
+  }
+
+  function attractionErrorTitle(error) {
+    if ([429, 406, 503].includes(error?.status)) return "附近景點服務忙碌";
+    if (error?.name === "AbortError" || /signal is aborted|operation was aborted/i.test(error?.message || "")) return "附近景點查詢逾時";
+    return "目前無法連線至附近景點服務";
+  }
+
+  function renderAttractions(items, spot, radius, options = {}) {
+    const { staleAt = 0, message = "" } = options;
+    if (!items.length) {
+      showAttractionStatus("附近沒有找到已命名景點", "可擴大搜尋半徑，或使用 Google 地圖查看附近景點。", googleSearchUrl("景點", spot.lat, spot.lon, "near"));
+      return;
+    }
+    const cards = items.map(item => {
+      const details = [item.category, item.address ? `地址：${item.address}` : "", item.opening ? `開放時間：${item.opening}` : ""].filter(Boolean).join(" · ");
+      const url = googleSearchUrl(item.name, item.lat, item.lon, "景點");
+      const distance = item.distance < 1000 ? `${Math.round(item.distance)} 公尺` : `${(item.distance / 1000).toFixed(1)} 公里`;
+      return `<article class="food-result-card attraction-result-card"><div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(details)}</p><div class="food-radius">距離泊點約 ${distance}</div></div><a class="food-link" href="${url}" target="_blank" rel="noopener">地圖導航 ↗</a></article>`;
+    }).join("");
+    const staleMessage = staleAt ? `<p class="data-source-hint">顯示上次查詢資料（${new Date(staleAt).toLocaleString("zh-TW")}）。</p>` : "";
+    const updateMessage = message ? `<p class="data-source-hint">${escapeHtml(message)}</p>` : "";
+    $("#attractionResults").innerHTML = `${updateMessage}${staleMessage}<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${items.length} 個景點 · OpenStreetMap</p>${cards}<p class="data-source-hint">景點標註和開放資訊可能不完整，出發前請再確認現場或官方資訊。</p>`;
+  }
+
+  async function fetchAttractionsFromProxy(spot, radius, signal) {
+    const params = new URLSearchParams({ lat: Number(spot.lat).toFixed(6), lon: Number(spot.lon).toFixed(6), radius: String(radius) });
+    const response = await fetch(`./api/attractions?${params}`, { signal, cache: "no-store", headers: { "Accept": "application/json" } });
+    if (!response.ok) {
+      const error = new Error(`附近景點服務回應 ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  }
+
+  async function searchNearbyAttractions() {
+    if (attractionRequestInProgress) return;
+    const spot = getSpot($("#attractionSpotSelect").value);
+    if (!spot) return showAttractionStatus("先選擇一個泊點", "選好泊點後即可查詢周邊景點。");
+    const radius = Number($("#attractionRadius").value);
+    const key = `${spot.id}_${radius}`;
+    const googleNearby = googleSearchUrl("景點", spot.lat, spot.lon, "near");
+    attractionRequestInProgress = true;
+    $("#searchAttractionsButton").disabled = true;
+    $("#searchAttractionsButton").textContent = "搜尋中…";
+    showAttractionStatus("正在查詢附近景點", "正在搜尋 OpenStreetMap 社群地圖資料。", googleNearby);
+    let cached = null;
+    try {
+      cached = await dbGet("attractions", key).catch(() => null);
+      const cachedItems = Array.isArray(cached?.items) ? cached.items : [];
+      const isFresh = cached && Date.now() - cached.savedAt < ATTRACTION_TTL;
+      if (isFresh) {
+        renderAttractions(cachedItems, spot, radius);
+        return;
+      }
+      if (!navigator.onLine) {
+        if (cached) renderAttractions(cachedItems, spot, radius, { staleAt: cached.savedAt, message: "目前離線，顯示本機保存的查詢結果。" });
+        else showAttractionStatus("目前離線", "先前搜尋過的景點會保存在本機；重新連線後可再次查詢。", googleNearby);
+        return;
+      }
+      if (cachedItems.length) renderAttractions(cachedItems, spot, radius, { staleAt: cached.savedAt, message: "正在更新附近景點資料…" });
+
+      let data;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 26000);
+      try {
+        try {
+          data = await fetchAttractionsFromProxy(spot, radius, controller.signal);
+        } catch (error) {
+          if (error.status !== 404 && error.status !== 405) throw error;
+          const query = attractionQuery(spot.lat, spot.lon, radius);
+          const fallbackController = new AbortController();
+          const fallbackTimer = setTimeout(() => fallbackController.abort(), 10000);
+          try {
+            data = await fetchFoodFromEndpoint("https://overpass-api.de/api/interpreter", query, fallbackController.signal);
+          } finally {
+            clearTimeout(fallbackTimer);
+          }
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+      const items = normalizeAttractionElements(data.elements, spot, radius);
+      await dbPut("attractions", { key, items, savedAt: Date.now() }).catch(() => {});
+      renderAttractions(items, spot, radius);
+    } catch (error) {
+      const cachedItems = Array.isArray(cached?.items) ? cached.items : [];
+      if (cached) renderAttractions(cachedItems, spot, radius, { staleAt: cached.savedAt, message: `${attractionErrorTitle(error)}，仍顯示本機保存資料。` });
+      else showAttractionStatus(attractionErrorTitle(error), "景點資料服務可能暫時忙碌或網路不穩，可稍後重試或改用 Google 地圖。", googleNearby);
+    } finally {
+      attractionRequestInProgress = false;
+      $("#searchAttractionsButton").disabled = false;
+      $("#searchAttractionsButton").textContent = "搜尋附近景點";
+    }
+  }
+
   const preferenceRules = {
     sea: /海邊|海線|海岸|海景|海濱|海水浴|沙灘|漁港|海$/i,
     mountain: /山區|山線|山景|森林|高山|林道|山莊|山屋|登山|山$/i,
@@ -1159,7 +1321,7 @@
     const dayCards = items.map(item => {
       const hits = item.hits.length ? item.hits.map(key => `<span class="badge">符合${prefLabels[key]}</span>`).join("") : "";
       const warning = item.exceeded ? `<p class="plan-warning">此點超過設定的 ${details.maxKm} 公里直線上限，是當下可選的最近點。</p>` : "";
-      return `<article class="day-card"><div class="day-number">DAY<b>${item.day}</b></div><div class="day-main"><div class="day-heading"><div><h3>${escapeHtml(item.spot.name)}</h3><p>由 ${escapeHtml(item.originName)} 出發 · ${Number(item.spot.lat).toFixed(5)}, ${Number(item.spot.lon).toFixed(5)}</p></div><span class="day-distance">直線 ${item.distance.toFixed(1)} km</span></div><div class="spot-badges">${hits}</div>${warning}<div class="day-actions"><a href="${mapsDirectionsUrl(item.origin, item.spot)}" target="_blank" rel="noopener">Google 導航 ↗</a><button type="button" data-action="food" data-id="${escapeHtml(item.spot.id)}">附近美食</button><button type="button" data-action="details" data-id="${escapeHtml(item.spot.id)}">泊點資訊</button></div></div></article>`;
+      return `<article class="day-card"><div class="day-number">DAY<b>${item.day}</b></div><div class="day-main"><div class="day-heading"><div><h3>${escapeHtml(item.spot.name)}</h3><p>由 ${escapeHtml(item.originName)} 出發 · ${Number(item.spot.lat).toFixed(5)}, ${Number(item.spot.lon).toFixed(5)}</p></div><span class="day-distance">直線 ${item.distance.toFixed(1)} km</span></div><div class="spot-badges">${hits}</div>${warning}<div class="day-actions"><a href="${mapsDirectionsUrl(item.origin, item.spot)}" target="_blank" rel="noopener">Google 導航 ↗</a><button type="button" data-action="food" data-id="${escapeHtml(item.spot.id)}">附近美食</button><button type="button" data-action="attractions" data-id="${escapeHtml(item.spot.id)}">附近景點</button><button type="button" data-action="details" data-id="${escapeHtml(item.spot.id)}">泊點資訊</button></div></div></article>`;
     }).join("");
     const omitted = items.length < details.days ? `<p class="plan-warning">找到 ${items.length} 個不重複泊點，少於需求的 ${details.days} 天；可放寬距離，或改選其他起點。</p>` : "";
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
@@ -1410,6 +1572,8 @@
     });
     $("#foodSpotSelect").addEventListener("change", () => showFoodStatus("已選擇泊點", "按下搜尋附近美食開始查詢。"));
     $("#searchFoodButton").addEventListener("click", searchFood);
+    $("#attractionSpotSelect").addEventListener("change", () => showAttractionStatus("已選擇泊點", "按下搜尋附近景點開始查詢。"));
+    $("#searchAttractionsButton").addEventListener("click", searchNearbyAttractions);
     $("#searchSourceSpotsButton").addEventListener("click", searchSourceSpots);
     $("#sourceKmlInput").addEventListener("change", event => { if (event.target.files[0]) importSourceKmlFile(event.target.files[0]); });
     $("#sourceSpotSearch").addEventListener("input", renderSourceSpots);
@@ -1480,7 +1644,7 @@
     initMap();
     await loadSpots();
     const requestedTab = location.hash.slice(1);
-    if (["find", "plan", "food", "updates"].includes(requestedTab)) switchTab(requestedTab);
+    if (["find", "plan", "food", "attractions", "updates"].includes(requestedTab)) switchTab(requestedTab);
   }
 
   init().catch(error => {
