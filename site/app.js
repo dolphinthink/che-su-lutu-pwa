@@ -2,7 +2,9 @@
   "use strict";
 
   const DB_NAME = "che-su-lutu-v1";
-  const SPOT_DATA_URL = "./data/spots.json?v=20261022-6";
+  const SOURCE_KML_URL = "https://www.google.com/maps/d/kml?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg&forcekml=1";
+  const SPOT_DATA_URL = "./data/spots.json?v=20261028-1";
+  const COUNTY_BOUNDARY_DATA_URL = "./data/tw-counties.geojson?v=20261028-1";
   const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-6";
   const WATERFRONT_DATA_URL = "./data/waterfront-points.json?v=20261022-6";
   const FOOD_DATA_URL = "./data/restaurant-directory.json?v=20261022-7";
@@ -18,6 +20,7 @@
 
   let dbPromise;
   let spots = [];
+  let countyBoundaries = [];
   let templeToiletData = null;
   let waterfrontData = null;
   let foodDirectoryPromise;
@@ -33,7 +36,12 @@
   let installPrompt = null;
   let toastTimer;
   let foodRequestInProgress = false;
+  let selectedSpotUpdateId = null;
+  let sourceSpots = [];
+  let sourceSpotsReady = false;
+  const selectedSourceSpotIds = new Set();
   const favoriteIds = new Set(readJson("che-su-favorites", []));
+  const spotCountiesByCoordinates = new WeakMap();
 
   function readJson(key, fallback) {
     try {
@@ -148,6 +156,9 @@
       throw new Error(`泊點資料回應 HTTP ${response.status}。請確認部署內容包含 data/spots.json，且網址位於 PWA 專案根目錄。`);
     }
     const base = await response.json();
+    const countyBoundaryResponse = await fetch(new URL(COUNTY_BOUNDARY_DATA_URL, document.baseURI)).catch(() => null);
+    const countyBoundaryData = countyBoundaryResponse?.ok ? await countyBoundaryResponse.json().catch(() => null) : null;
+    countyBoundaries = (countyBoundaryData?.features || []).map(createCountyBoundary).filter(Boolean).sort((a, b) => a.area - b.area);
     const templeResponse = await fetch(new URL(TEMPLE_DATA_URL, document.baseURI)).catch(() => null);
     templeToiletData = templeResponse?.ok ? await templeResponse.json().catch(() => null) : null;
     const waterfrontResponse = await fetch(new URL(WATERFRONT_DATA_URL, document.baseURI)).catch(() => null);
@@ -161,7 +172,7 @@
     }));
     for (const spot of saved) {
       const baseSpot = merged.get(spot.id);
-      merged.set(spot.id, baseSpot ? { ...baseSpot, ...spot, county: spot.county || baseSpot.county } : spot);
+      merged.set(spot.id, baseSpot ? { ...baseSpot, ...spot, county: baseSpot.county || spot.county } : spot);
     }
     for (const temple of templeToiletData?.temples || []) {
       if (temple.id && !merged.has(temple.id)) merged.set(temple.id, temple);
@@ -180,7 +191,9 @@
         toiletInfo: existing.toiletInfo
       } : point);
     }
-    spots = [...merged.values()].filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)));
+    spots = [...merged.values()]
+      .filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)))
+      .map(withResolvedCounty);
     spots.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     const templeToggle = $("#templeFacilitiesToggle");
     if (templeToggle) {
@@ -197,6 +210,7 @@
     await loadPartnerDirectory();
     fillSpotSelectors();
     renderSpots();
+    renderSpotUpdateSearch();
     renderReports();
   }
 
@@ -320,6 +334,101 @@
     return String(value ?? "").normalize("NFKC").replace(/台/g, "臺").toLocaleLowerCase("zh-Hant");
   }
 
+  function createCountyBoundary(feature) {
+    const name = String(feature?.properties?.COUNTYNAME || "").trim();
+    const geometry = feature?.geometry;
+    if (!name || !geometry?.coordinates) return null;
+    const bounds = { minLon: Infinity, minLat: Infinity, maxLon: -Infinity, maxLat: -Infinity };
+    const visitCoordinates = value => {
+      if (!Array.isArray(value)) return;
+      if (typeof value[0] === "number" && typeof value[1] === "number") {
+        bounds.minLon = Math.min(bounds.minLon, value[0]);
+        bounds.maxLon = Math.max(bounds.maxLon, value[0]);
+        bounds.minLat = Math.min(bounds.minLat, value[1]);
+        bounds.maxLat = Math.max(bounds.maxLat, value[1]);
+        return;
+      }
+      value.forEach(visitCoordinates);
+    };
+    visitCoordinates(geometry.coordinates);
+    if (!Number.isFinite(bounds.minLon)) return null;
+    const ringArea = ring => {
+      let area = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+      return Math.abs(area / 2);
+    };
+    const polygonArea = rings => Math.max(0, ringArea(rings[0]) - rings.slice(1).reduce((sum, ring) => sum + ringArea(ring), 0));
+    const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
+    const area = polygons.reduce((sum, rings) => sum + polygonArea(rings), 0);
+    if (!Number.isFinite(area) || area <= 0) return null;
+    const normalizedName = normalizeSearchText(name);
+    return {
+      name,
+      normalizedName,
+      shortName: normalizedName.replace(/(?:市|縣)$/u, ""),
+      geometry,
+      bounds,
+      area
+    };
+  }
+
+  function pointOnRingSegment(point, start, end) {
+    const [x, y] = point;
+    const [x1, y1] = start;
+    const [x2, y2] = end;
+    const cross = (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1);
+    const epsilon = 1e-10;
+    return Math.abs(cross) <= epsilon
+      && x >= Math.min(x1, x2) - epsilon && x <= Math.max(x1, x2) + epsilon
+      && y >= Math.min(y1, y2) - epsilon && y <= Math.max(y1, y2) + epsilon;
+  }
+
+  function pointInRing(point, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const start = ring[j];
+      const end = ring[i];
+      if (pointOnRingSegment(point, start, end)) return true;
+      if ((start[1] > point[1]) !== (end[1] > point[1])
+        && point[0] < (end[0] - start[0]) * (point[1] - start[1]) / (end[1] - start[1]) + start[0]) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function pointInPolygon(point, rings) {
+    return Boolean(rings?.length && pointInRing(point, rings[0]) && !rings.slice(1).some(ring => pointInRing(point, ring)));
+  }
+
+  function isInsideGeometry(lon, lat, geometry) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat) || !geometry) return false;
+    const point = [lon, lat];
+    if (geometry.type === "Polygon") return pointInPolygon(point, geometry.coordinates);
+    if (geometry.type === "MultiPolygon") return geometry.coordinates.some(polygon => pointInPolygon(point, polygon));
+    return false;
+  }
+
+  function countyAtPoint(lon, lat) {
+    for (const boundary of countyBoundaries) {
+      const { minLon, minLat, maxLon, maxLat } = boundary.bounds;
+      if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) continue;
+      if (isInsideGeometry(lon, lat, boundary.geometry)) return boundary.name;
+    }
+    return "";
+  }
+
+  function withResolvedCounty(spot) {
+    const county = countyAtPoint(Number(spot.lon), Number(spot.lat));
+    const resolved = county ? { ...spot, county } : spot;
+    spotCountiesByCoordinates.set(resolved, county);
+    return resolved;
+  }
+
+  function findCountySearchMatches(query) {
+    return countyBoundaries.filter(boundary => query === boundary.normalizedName || query === boundary.shortName);
+  }
+
   function drawMapMarkers(filteredSpots = getFilteredSpots(false)) {
     if (!map || !markerLayer) return;
     markerLayer.clearLayers();
@@ -344,6 +453,7 @@
 
   function getFilteredSpots(applyRadius = true) {
     const query = normalizeSearchText($("#searchInput").value.trim());
+    const searchCounties = findCountySearchMatches(query);
     const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test(query);
     const includeWaterfront = $("#waterfrontToggle")?.getAttribute("aria-pressed") === "true";
     const radiusValue = $("#radiusSelect").value;
@@ -353,8 +463,9 @@
       if (spot.category === "waterfront" && !includeWaterfront) return false;
       if (includeWaterfront && !spot.waterType) return false;
       if (favorites && !favoriteIds.has(spot.id)) return false;
-      if (query && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""} ${spot.waterLabel || ""} ${spot.waterType || ""}`).includes(query)) return false;
-      if (applyRadius && radiusValue !== "all" && userPosition && haversineKm(userPosition, spot) > Number(radiusValue)) return false;
+      if (searchCounties.length && !searchCounties.some(boundary => normalizeSearchText(spotCountiesByCoordinates.get(spot) || spot.county || "") === boundary.normalizedName)) return false;
+      if (query && !searchCounties.length && !normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon} ${spot.hot || ""} ${spot.waterLabel || ""} ${spot.waterType || ""}`).includes(query)) return false;
+      if (applyRadius && !query && radiusValue !== "all" && userPosition && haversineKm(userPosition, spot) > Number(radiusValue)) return false;
       return true;
     });
     if ($("#sortSelect").value === "name" || !userPosition) result.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
@@ -402,7 +513,13 @@
     const includeTempleFacilities = $("#templeFacilitiesToggle")?.getAttribute("aria-pressed") === "true" || /廟|寺|宮|祠|壇|神社|道觀|精舍|佛堂|堂|殿/u.test($("#searchInput").value);
     const includeWaterfront = $("#waterfrontToggle")?.getAttribute("aria-pressed") === "true";
     countLabel.textContent = `${results.length.toLocaleString("zh-TW")} 個${includeWaterfront || includeTempleFacilities ? "地點" : "泊點"}`;
-    $("#listSubheading").textContent = userPosition ? "依距離排序；點位可直接開啟地圖和美食搜尋" : "可收藏常用泊點";
+    const hasQuery = $("#searchInput").value.trim();
+    const searchCounties = findCountySearchMatches(normalizeSearchText(String(hasQuery || "").trim()));
+    $("#listSubheading").textContent = hasQuery
+      ? searchCounties.length
+        ? userPosition ? `依${searchCounties.map(boundary => boundary.name).join("、")}座標範圍篩選；依目前位置排序` : `依${searchCounties.map(boundary => boundary.name).join("、")}座標範圍篩選泊點`
+        : userPosition ? "關鍵字搜尋全台；依目前位置排序" : "關鍵字搜尋全台泊點"
+      : userPosition ? "已依距離排序；可選距離縮小附近範圍" : "可收藏常用泊點";
     const list = $("#spotList");
     list.innerHTML = results.slice(0, visibleCount).map(makeSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的${includeWaterfront ? "近水地點" : "泊點"}</strong><p>試試不同關鍵字或放寬距離範圍。</p></div>`;
     $("#loadMore").hidden = results.length <= visibleCount;
@@ -473,6 +590,250 @@
     return spots.find(spot => spot.id === id);
   }
 
+  function renderSpotUpdateSearch() {
+    const input = $("#spotUpdateSearch");
+    if (!input) return;
+    const query = normalizeSearchText(input.value.trim());
+    const eligible = spots.filter(spot => spot.category !== "temple-restroom" && spot.category !== "waterfront" && spot.overnightEligible !== false);
+    const matches = query
+      ? eligible.filter(spot => normalizeSearchText(`${spot.name} ${spot.county || ""} ${spot.lat} ${spot.lon}`).includes(query))
+      : [];
+    const shown = matches.slice(0, 12);
+    $("#spotUpdateCount").textContent = query ? `${matches.length.toLocaleString("zh-TW")} 筆符合${matches.length > shown.length ? "，顯示前 12 筆" : ""}` : "輸入關鍵字開始搜尋";
+    $("#spotUpdateResults").innerHTML = query
+      ? shown.map(spot => `<button class="spot-update-result ${spot.id === selectedSpotUpdateId ? "selected" : ""}" type="button" data-update-spot="${escapeHtml(spot.id)}"><strong>${escapeHtml(spot.name)}</strong><span>${escapeHtml(spot.county || "泊點")} · ${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}</span></button>`).join("") || `<div class="empty-state"><strong>找不到符合的泊點</strong><p>試試名稱、縣市或座標的一部分。</p></div>`
+      : `<div class="empty-state"><strong>搜尋要更新的泊點</strong><p>目前共有 ${eligible.length.toLocaleString("zh-TW")} 筆泊點可搜尋。</p></div>`;
+  }
+
+  function selectSpotForUpdate(id) {
+    const spot = getSpot(id);
+    if (!spot) return;
+    selectedSpotUpdateId = spot.id;
+    $("#spotUpdateName").value = spot.name || "";
+    $("#spotUpdateLat").value = String(spot.lat ?? "");
+    $("#spotUpdateLon").value = String(spot.lon ?? "");
+    $("#spotUpdateHot").value = spot.hot ?? "";
+    $("#spotUpdatePhoto").value = spot.photo || "";
+    $("#spotUpdateFormTitle").textContent = `更新：${spot.name}`;
+    $("#spotUpdateStatus").textContent = "座標請依地圖或現場資訊確認。";
+    $("#spotUpdateForm").hidden = false;
+    renderSpotUpdateSearch();
+    $("#spotUpdateForm").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  async function saveSpotUpdate(event) {
+    event.preventDefault();
+    const original = getSpot(selectedSpotUpdateId);
+    if (!original) return;
+    const name = $("#spotUpdateName").value.trim();
+    const lat = Number($("#spotUpdateLat").value);
+    const lon = Number($("#spotUpdateLon").value);
+    const photoValue = $("#spotUpdatePhoto").value.trim();
+    const photo = photoValue ? safeWebUrl(photoValue) : "";
+    if (!name) return notify("請輸入點位名稱。");
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) return notify("請輸入有效的緯度與經度。");
+    if (photoValue && !photo) return notify("圖片連結須使用 http 或 https 網址。");
+    const coordinateConflict = spots.find(spot => spot.id !== original.id && Number(spot.lat) === lat && Number(spot.lon) === lon);
+    if (coordinateConflict) return notify(`這組座標已屬於「${coordinateConflict.name}」，請確認後再儲存。`);
+    const updated = withResolvedCounty({ ...original, name, lat, lon, hot: $("#spotUpdateHot").value.trim(), photo });
+    try {
+      await dbPut("spots", updated);
+      spots = spots.map(spot => spot.id === original.id ? updated : spot).sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+      fillSpotSelectors();
+      renderSpots();
+      renderSpotUpdateSearch();
+      $("#spotUpdateFormTitle").textContent = `已更新：${updated.name}`;
+      $("#spotUpdateStatus").textContent = "已儲存在此瀏覽器。下載目前資料可備份這筆更新。";
+      notify("泊點已更新並儲存在此裝置。");
+    } catch (error) {
+      $("#spotUpdateStatus").textContent = error.message || "儲存失敗，請確認瀏覽器儲存空間。";
+    }
+  }
+
+  function cancelSpotUpdate() {
+    selectedSpotUpdateId = null;
+    $("#spotUpdateForm").reset();
+    $("#spotUpdateForm").hidden = true;
+    renderSpotUpdateSearch();
+  }
+
+  function directKmlChildText(node, name) {
+    const child = [...(node?.children || [])].find(element => element.localName === name);
+    return child?.textContent?.trim() || "";
+  }
+
+  function kmlElements(node, name) {
+    return [...(node?.getElementsByTagNameNS?.("*", name) || [])];
+  }
+
+  function readKmlMetadata(placemark) {
+    const fields = new Map();
+    for (const data of kmlElements(placemark, "Data")) {
+      const key = data.getAttribute("name");
+      const value = directKmlChildText(data, "value");
+      if (key && value) fields.set(normalizeSearchText(key), value);
+    }
+    for (const data of kmlElements(placemark, "SimpleData")) {
+      const key = data.getAttribute("name");
+      const value = data.textContent.trim();
+      if (key && value) fields.set(normalizeSearchText(key), value);
+    }
+    const pick = (...keys) => keys.map(key => fields.get(normalizeSearchText(key))).find(Boolean) || "";
+    return {
+      hot: pick("熱水欄位（原始值）", "熱水欄位", "熱水", "hot"),
+      photo: pick("圖片連結", "圖片", "photo"),
+      style: pick("圖示樣式ID", "樣式ID", "style")
+    };
+  }
+
+  function parseSourceKml(kmlText) {
+    const xml = new DOMParser().parseFromString(kmlText, "application/xml");
+    if (xml.getElementsByTagName("parsererror").length) throw new Error("KML 格式無法讀取，請重新匯出來源地圖。");
+    const folder = kmlElements(xml, "Folder").find(item => normalizeSearchText(directKmlChildText(item, "name")).replace(/[\s　]/g, "") === "泊點");
+    if (!folder) throw new Error("來源 KML 沒有找到名稱為「泊點」的圖層。請匯出整份來源地圖的 KML。");
+    const byId = new Map();
+    for (const placemark of kmlElements(folder, "Placemark")) {
+      const name = directKmlChildText(placemark, "name");
+      const point = kmlElements(placemark, "Point")[0];
+      const coordinateText = directKmlChildText(point, "coordinates");
+      const [lonText, latText] = coordinateText.split(/[\s,]+/).filter(Boolean);
+      const lat = Number(latText);
+      const lon = Number(lonText);
+      if (!name || !Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+      const metadata = readKmlMetadata(placemark);
+      let photo = safeWebUrl(metadata.photo);
+      if (!photo) {
+        const description = directKmlChildText(placemark, "description");
+        if (description) {
+          const descriptionDoc = new DOMParser().parseFromString(description, "text/html");
+          photo = safeWebUrl(descriptionDoc.querySelector("img[src]")?.getAttribute("src"));
+        }
+      }
+      const style = metadata.style || directKmlChildText(placemark, "styleUrl").replace(/^#/, "");
+      const id = stableId(lat, lon);
+      byId.set(id, { id, name, lat, lon, hot: metadata.hot, photo, style, source: "車床天地公開總圖" });
+    }
+    if (!byId.size) throw new Error("在「泊點」圖層中沒有讀到有效座標點。");
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+  }
+
+  function renderSourceSpots() {
+    const search = $("#sourceSpotSearch");
+    const query = normalizeSearchText(search.value.trim());
+    const matches = sourceSpots.filter(spot => !query || normalizeSearchText(`${spot.name} ${spot.lat} ${spot.lon}`).includes(query));
+    const shown = matches.slice(0, 100);
+    const candidateIds = new Set(sourceSpots.map(spot => spot.id));
+    for (const id of selectedSourceSpotIds) if (!candidateIds.has(id)) selectedSourceSpotIds.delete(id);
+    $("#sourceSpotCount").textContent = `${matches.length.toLocaleString("zh-TW")} 筆可新增${matches.length > shown.length ? "，顯示前 100 筆" : ""}`;
+    $("#sourceSpotResults").innerHTML = shown.length
+      ? shown.map(spot => `<label class="source-spot-result"><input type="checkbox" data-source-spot="${escapeHtml(spot.id)}" ${selectedSourceSpotIds.has(spot.id) ? "checked" : ""}><span><strong>${escapeHtml(spot.name)}</strong><small>${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${spot.hot ? ` · 熱水 ${escapeHtml(spot.hot)}` : ""}</small></span></label>`).join("")
+      : `<div class="empty-state"><strong>${sourceSpotsReady ? "沒有符合的新增泊點" : "尚未載入來源資料"}</strong><p>${sourceSpotsReady ? "目前搜尋條件沒有可新增的項目，或來源泊點都已在本機資料中。" : "按下上方按鈕搜尋來源地圖，或匯入 KML 檔。"}</p></div>`;
+    $("#selectVisibleSourceSpots").disabled = !shown.length;
+    $("#addSelectedSourceSpots").disabled = selectedSourceSpotIds.size === 0;
+    $("#addSelectedSourceSpots").textContent = selectedSourceSpotIds.size ? `新增所選泊點（${selectedSourceSpotIds.size}）` : "新增所選泊點";
+  }
+
+  function acceptSourceKml(kmlText, sourceLabel) {
+    const imported = parseSourceKml(kmlText);
+    const knownIds = new Set(spots.map(spot => spot.id));
+    const knownCoordinates = new Set(spots.map(spot => stableId(spot.lat, spot.lon)));
+    sourceSpots = imported.filter(spot => !knownIds.has(spot.id) && !knownCoordinates.has(stableId(spot.lat, spot.lon)));
+    sourceSpotsReady = true;
+    selectedSourceSpotIds.clear();
+    $("#sourceSpotSearch").disabled = false;
+    $("#sourceSpotSearch").value = "";
+    $("#sourceSpotStatus").textContent = `已讀取${sourceLabel}：來源「泊點」圖層 ${imported.length.toLocaleString("zh-TW")} 筆，有 ${sourceSpots.length.toLocaleString("zh-TW")} 筆尚未加入本機。`;
+    renderSourceSpots();
+  }
+
+  async function searchSourceSpots() {
+    const button = $("#searchSourceSpotsButton");
+    button.disabled = true;
+    button.textContent = "正在讀取來源…";
+    $("#sourceSpotStatus").textContent = "正在向車床天地公開總圖讀取最新泊點資料…";
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      try {
+        const response = await fetch(SOURCE_KML_URL, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error(`來源地圖回應 HTTP ${response.status}。`);
+        acceptSourceKml(await response.text(), "來源地圖");
+      } finally { clearTimeout(timeout); }
+    } catch (error) {
+      const reason = error.name === "AbortError" ? "連線逾時。" : error instanceof TypeError ? "瀏覽器或來源伺服器未允許直接讀取。" : error.message || "瀏覽器無法直接讀取來源地圖。";
+      $("#sourceSpotStatus").textContent = `${reason} 可在來源地圖匯出 KML，或點選「匯入來源 KML」讀取。`;
+    } finally {
+      button.disabled = false;
+      button.textContent = "重新搜尋來源泊點";
+    }
+  }
+
+  async function importSourceKmlFile(file) {
+    if (!file) return;
+    try {
+      acceptSourceKml(await file.text(), `檔案「${file.name}」`);
+    } catch (error) {
+      $("#sourceSpotStatus").textContent = error.message || "無法讀取 KML 檔。";
+    } finally {
+      $("#sourceKmlInput").value = "";
+    }
+  }
+
+  function toggleVisibleSourceSpots() {
+    const query = normalizeSearchText($("#sourceSpotSearch").value.trim());
+    const shown = sourceSpots.filter(spot => !query || normalizeSearchText(`${spot.name} ${spot.lat} ${spot.lon}`).includes(query)).slice(0, 100);
+    const allSelected = shown.length && shown.every(spot => selectedSourceSpotIds.has(spot.id));
+    for (const spot of shown) {
+      if (allSelected) selectedSourceSpotIds.delete(spot.id);
+      else selectedSourceSpotIds.add(spot.id);
+    }
+    renderSourceSpots();
+  }
+
+  async function addSelectedSourceSpots() {
+    const selected = sourceSpots.filter(spot => selectedSourceSpotIds.has(spot.id));
+    if (!selected.length) return;
+    const knownIds = new Set(spots.map(spot => spot.id));
+    const knownCoordinates = new Set(spots.map(spot => stableId(spot.lat, spot.lon)));
+    const added = selected.filter(spot => !knownIds.has(spot.id) && !knownCoordinates.has(stableId(spot.lat, spot.lon)));
+    if (!added.length) {
+      $("#sourceSpotStatus").textContent = "選取的泊點已存在於本機資料。";
+      acceptSourceKmlSearchRefresh();
+      return;
+    }
+    const button = $("#addSelectedSourceSpots");
+    button.disabled = true;
+    try {
+      const normalizedAdded = added.map(withResolvedCounty);
+      for (const spot of normalizedAdded) await dbPut("spots", spot);
+      spots = [...spots, ...normalizedAdded].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+      fillSpotSelectors();
+      visibleCount = PAGE_SIZE;
+      renderSpots();
+      renderSpotUpdateSearch();
+      renderReports();
+      const addedIds = new Set(added.map(spot => spot.id));
+      sourceSpots = sourceSpots.filter(spot => !addedIds.has(spot.id));
+      selectedSourceSpotIds.clear();
+      $("#sourceSpotStatus").textContent = `已新增 ${added.length.toLocaleString("zh-TW")} 筆泊點，資料已儲存在此瀏覽器。`;
+      renderSourceSpots();
+      notify(`已新增 ${added.length} 筆來源泊點。`);
+    } catch (error) {
+      $("#sourceSpotStatus").textContent = error.message || "新增泊點失敗，請確認瀏覽器儲存空間。";
+    } finally {
+      button.disabled = false;
+      renderSourceSpots();
+    }
+  }
+
+  function acceptSourceKmlSearchRefresh() {
+    const knownIds = new Set(spots.map(spot => spot.id));
+    const knownCoordinates = new Set(spots.map(spot => stableId(spot.lat, spot.lon)));
+    sourceSpots = sourceSpots.filter(spot => !knownIds.has(spot.id) && !knownCoordinates.has(stableId(spot.lat, spot.lon)));
+    selectedSourceSpotIds.clear();
+    renderSourceSpots();
+  }
+
   function centerOnSpot(spot) {
     if (!map) return;
     switchTab("find");
@@ -516,7 +877,6 @@
       userMarker = L.circleMarker([userPosition.lat, userPosition.lon], { radius: 8, weight: 3, color: "#fff", fillColor: "#3979de", fillOpacity: 1 }).addTo(map).bindTooltip("目前位置");
       map.setView([userPosition.lat, userPosition.lon], 12);
     }
-    if ($("#radiusSelect").value === "all") $("#radiusSelect").value = "25";
     renderSpots();
     notify("已定位，泊點依距離排列。");
   }
@@ -952,13 +1312,21 @@
       if (!incoming.length) throw new Error("找不到有效點位；請確認有點位名稱、緯度和經度欄位。");
       const merged = new Map(spots.map(spot => [spot.id, spot]));
       let added = 0;
+      const savedIncoming = [];
       for (const spot of incoming) {
-        if (!merged.has(spot.id)) added++;
-        merged.set(spot.id, spot);
+        const sameCoordinates = [...merged.values()].find(existing => Number(existing.lat) === spot.lat && Number(existing.lon) === spot.lon);
+        const targetId = sameCoordinates?.id || spot.id;
+        if (!sameCoordinates && !merged.has(targetId)) added++;
+        const updated = withResolvedCounty({ ...spot, id: targetId });
+        merged.set(targetId, updated);
+        savedIncoming.push(updated);
       }
-      for (const spot of incoming) await dbPut("spots", spot);
-      spots = [...merged.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+      for (const spot of savedIncoming) await dbPut("spots", spot);
+      spots = [...merged.values()]
+        .map(withResolvedCounty)
+        .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
       fillSpotSelectors();
+      renderSpotUpdateSearch();
       visibleCount = PAGE_SIZE;
       renderSpots();
       status.textContent = `已匯入 ${incoming.length} 筆；新增 ${added} 筆，其他同座標資料已更新。本次變更存在此瀏覽器。`;
@@ -1072,7 +1440,17 @@
     $("#partnerLoadMore").addEventListener("click", () => { visiblePartnerCount += PARTNER_PAGE_SIZE; renderPartnerSpots(); });
     $("#partnerFoodSearch").addEventListener("input", renderPartnerFoods);
     $("#searchInput").addEventListener("input", () => { visibleCount = PAGE_SIZE; renderSpots(true); });
-    $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; renderSpots(true); $("#searchInput").focus(); });
+    $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; visibleCount = PAGE_SIZE; renderSpots(true); $("#searchInput").focus(); });
+    $("#resetSpotFilters").addEventListener("click", () => {
+      $("#searchInput").value = "";
+      $("#radiusSelect").value = "all";
+      $("#favoritesOnly").setAttribute("aria-pressed", "false");
+      $("#templeFacilitiesToggle").setAttribute("aria-pressed", "false");
+      $("#waterfrontToggle").setAttribute("aria-pressed", "false");
+      visibleCount = PAGE_SIZE;
+      renderSpots(true);
+      $("#searchInput").focus();
+    });
     $("#sortSelect").addEventListener("change", renderSpots);
     $("#radiusSelect").addEventListener("change", () => {
       if ($("#radiusSelect").value !== "all" && !userPosition) locateUser().catch(error => notify(error.message));
@@ -1122,7 +1500,26 @@
     });
     $("#foodSpotSelect").addEventListener("change", () => showFoodStatus("已選擇泊點", "按下搜尋附近美食開始查詢。"));
     $("#searchFoodButton").addEventListener("click", searchFood);
+    $("#searchSourceSpotsButton").addEventListener("click", searchSourceSpots);
+    $("#sourceKmlInput").addEventListener("change", event => { if (event.target.files[0]) importSourceKmlFile(event.target.files[0]); });
+    $("#sourceSpotSearch").addEventListener("input", renderSourceSpots);
+    $("#selectVisibleSourceSpots").addEventListener("click", toggleVisibleSourceSpots);
+    $("#sourceSpotResults").addEventListener("change", event => {
+      const checkbox = event.target.closest("[data-source-spot]");
+      if (!checkbox) return;
+      if (checkbox.checked) selectedSourceSpotIds.add(checkbox.dataset.sourceSpot);
+      else selectedSourceSpotIds.delete(checkbox.dataset.sourceSpot);
+      renderSourceSpots();
+    });
+    $("#addSelectedSourceSpots").addEventListener("click", addSelectedSourceSpots);
     $("#csvInput").addEventListener("change", event => { if (event.target.files[0]) importCsv(event.target.files[0]); });
+    $("#spotUpdateSearch").addEventListener("input", renderSpotUpdateSearch);
+    $("#spotUpdateResults").addEventListener("click", event => {
+      const button = event.target.closest("[data-update-spot]");
+      if (button) selectSpotForUpdate(button.dataset.updateSpot);
+    });
+    $("#spotUpdateForm").addEventListener("submit", saveSpotUpdate);
+    $("#cancelSpotUpdate").addEventListener("click", cancelSpotUpdate);
     $("#exportCsvButton").addEventListener("click", exportCsv);
     $("#reportForm").addEventListener("submit", submitReport);
     $("#exportReportsButton").addEventListener("click", exportReports);

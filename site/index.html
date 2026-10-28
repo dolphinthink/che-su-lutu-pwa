@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261022-8"></script>
+  <script defer src="./app.js?v=20261028-8"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -54,6 +54,7 @@
           <button class="filter-chip" id="favoritesOnly" type="button" aria-pressed="false">♡ 收藏</button>
           <button class="filter-chip" id="templeFacilitiesToggle" type="button" aria-pressed="false" title="加入廟宇登記公廁位置；廁所開放時間及車泊許可需另確認">⛩ 廟宇公廁</button>
           <button class="filter-chip waterfront-filter" id="waterfrontToggle" type="button" aria-pressed="false" title="搜尋溪、河、海周邊的公開泊點與官方景點；不以戲水條件篩選，停車及車宿規定請另確認">🌊 溪河海</button>
+          <button class="filter-reset" id="resetSpotFilters" type="button">清除條件</button>
           <span class="result-count" id="resultCount">讀取資料中…</span>
         </div>
         <div id="dataLoadError" class="data-load-error" role="alert" hidden></div>
@@ -128,7 +129,40 @@
       </section>
 
       <section class="view" id="view-updates" aria-labelledby="updatesTitle">
-        <div class="page-heading"><div><p class="eyebrow">COMMUNITY NOTES</p><h1 id="updatesTitle">更新泊點資料</h1><p class="muted">匯入更新後的 CSV，或先在這台裝置記錄現場回報。</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">COMMUNITY NOTES</p><h1 id="updatesTitle">更新泊點資料</h1><p class="muted">可從來源地圖新增泊點、搜尋修改單筆資料、匯入 CSV 或記錄現場回報。</p></div></div>
+        <div class="panel source-import-panel">
+          <div class="panel-title"><span class="title-icon">⇩</span><div><h2>從車床天地來源地圖新增泊點</h2><p>讀取來源地圖的「泊點」圖層，只列出目前資料沒有的項目。</p></div></div>
+          <div class="button-row source-import-buttons">
+            <button id="searchSourceSpotsButton" class="button button-primary" type="button">搜尋來源新增泊點</button>
+            <label class="button button-light file-button">匯入來源 KML<input id="sourceKmlInput" type="file" accept=".kml,.xml,application/vnd.google-earth.kml+xml,text/xml,application/xml"></label>
+            <a class="button button-light" href="https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg" target="_blank" rel="noopener">開啟來源地圖 ↗</a>
+          </div>
+          <p id="sourceSpotStatus" class="status-line" aria-live="polite">尚未搜尋來源地圖。搜尋只會在你按下按鈕後進行。</p>
+          <label class="spot-update-search source-spot-search"><span aria-hidden="true">⌕</span><input id="sourceSpotSearch" type="search" placeholder="搜尋來源泊點名稱或座標" autocomplete="off" disabled><span id="sourceSpotCount" class="result-count" aria-live="polite">等待來源資料</span></label>
+          <div class="source-import-actions"><button id="selectVisibleSourceSpots" class="text-button" type="button" disabled>全選目前顯示</button><button id="addSelectedSourceSpots" class="button button-primary" type="button" disabled>新增所選泊點</button></div>
+          <div id="sourceSpotResults" class="source-spot-results" aria-live="polite"><div class="empty-state"><strong>按下搜尋來源新增泊點</strong><p>目前資料不會被來源檔直接覆寫。</p></div></div>
+          <p class="data-source-hint">若瀏覽器無法直接讀取，可<a href="https://www.google.com/maps/d/kml?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg&amp;forcekml=1" target="_blank" rel="noopener">開啟來源 KML ↗</a>，或依<a href="https://support.google.com/mymaps/answer/3109452?hl=zh-Hant" target="_blank" rel="noopener">Google 匯出說明 ↗</a>取得 KML，再用「匯入來源 KML」。只處理「泊點」圖層中的座標點。</p>
+        </div>
+        <div class="panel spot-update-panel">
+          <div class="panel-title"><span class="title-icon">⌕</span><div><h2>搜尋並更新泊點</h2><p>修改名稱、座標、熱水欄位或圖片連結。</p></div></div>
+          <label class="spot-update-search"><span aria-hidden="true">⌕</span><input id="spotUpdateSearch" type="search" placeholder="搜尋泊點名稱、縣市或座標" autocomplete="off"><span id="spotUpdateCount" class="result-count" aria-live="polite">輸入關鍵字開始搜尋</span></label>
+          <div id="spotUpdateResults" class="spot-update-results" aria-live="polite"><div class="empty-state"><strong>搜尋要更新的泊點</strong><p>輸入名稱、縣市或座標，從結果中選擇一筆。</p></div></div>
+          <form id="spotUpdateForm" class="spot-update-form" hidden>
+            <div class="spot-update-form-heading"><div><h3 id="spotUpdateFormTitle">編輯泊點</h3><p>儲存後更新此裝置的泊點資料。</p></div><button id="cancelSpotUpdate" class="text-button" type="button">取消</button></div>
+            <label class="field"><span>點位名稱</span><input id="spotUpdateName" type="text" maxlength="160" required></label>
+            <div class="form-grid two-cols">
+              <label class="field"><span>緯度</span><input id="spotUpdateLat" type="number" min="-90" max="90" step="any" required></label>
+              <label class="field"><span>經度</span><input id="spotUpdateLon" type="number" min="-180" max="180" step="any" required></label>
+            </div>
+            <div class="form-grid two-cols">
+              <label class="field"><span>熱水欄位（原始值）</span><input id="spotUpdateHot" type="text" maxlength="120"></label>
+              <label class="field"><span>圖片連結</span><input id="spotUpdatePhoto" type="url" placeholder="https://…"></label>
+            </div>
+            <p id="spotUpdateStatus" class="status-line" aria-live="polite">座標請依地圖或現場資訊確認。</p>
+            <button class="button button-primary" type="submit">儲存泊點更新</button>
+          </form>
+          <p class="local-storage-note"><strong>儲存位置：</strong>修改只保存在目前瀏覽器；可下載 CSV 備份，或匯出後提供給其他裝置匯入。</p>
+        </div>
         <div class="panel update-import">
           <div class="panel-title"><span class="title-icon">⇧</span><div><h2>匯入泊點 CSV</h2><p>支援本專案欄位格式；匯入內容會新增或更新本機資料。</p></div></div>
           <div class="button-row"><label class="button button-outline file-button">選擇 CSV 檔<input id="csvInput" type="file" accept=".csv,text/csv"></label><button id="exportCsvButton" class="button button-light" type="button">下載目前資料</button></div>

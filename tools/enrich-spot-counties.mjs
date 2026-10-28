@@ -26,6 +26,19 @@ function geometryContains(geometry, longitude, latitude) {
   return polygons.some(rings => polygonContains(rings, longitude, latitude));
 }
 
+function ringArea(ring) {
+  let area = 0;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    area += ring[previous][0] * ring[index][1] - ring[index][0] * ring[previous][1];
+  }
+  return Math.abs(area / 2);
+}
+
+function geometryArea(geometry) {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.reduce((total, rings) => total + Math.max(0, ringArea(rings[0]) - rings.slice(1).reduce((holes, ring) => holes + ringArea(ring), 0)), 0);
+}
+
 function distanceToSegmentMeters(longitude, latitude, start, end) {
   const cosine = Math.cos((latitude * Math.PI) / 180);
   const x = value => ((value * Math.PI) / 180) * 6371000 * cosine;
@@ -63,6 +76,7 @@ const boundaries = JSON.parse(await readFile(boundaryPath, "utf8"));
 if (boundaries.crs?.properties?.name && !/CRS84|4326/.test(boundaries.crs.properties.name)) {
   throw new Error(`Expected WGS84 longitude/latitude boundaries, got ${boundaries.crs.properties.name}`);
 }
+const countyFeatures = [...boundaries.features].sort((left, right) => geometryArea(left.geometry) - geometryArea(right.geometry));
 
 for (const spotPath of spotPaths) {
   const spots = JSON.parse(await readFile(spotPath, "utf8"));
@@ -71,8 +85,8 @@ for (const spotPath of spotPaths) {
   for (const spot of spots) {
     const longitude = Number(spot.lon);
     const latitude = Number(spot.lat);
-    const feature = boundaries.features.find(item => geometryContains(item.geometry, longitude, latitude));
-    const county = feature?.properties?.COUNTYNAME || nearestCountyWithin(longitude, latitude, boundaries.features);
+    const feature = countyFeatures.find(item => geometryContains(item.geometry, longitude, latitude));
+    const county = feature?.properties?.COUNTYNAME || nearestCountyWithin(longitude, latitude, countyFeatures);
     if (county) {
       spot.county = county;
       counts.set(spot.county, (counts.get(spot.county) || 0) + 1);

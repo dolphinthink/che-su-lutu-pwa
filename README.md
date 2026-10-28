@@ -26,7 +26,7 @@ npx wrangler pages deploy site --project-name=che-su-lutu-pwa --branch=main
 
 ## 泊點縣市搜尋
 
-`site/data/spots.json` 的 `county` 欄位由泊點座標對應至內政部國土測繪中心縣市界線，供離線搜尋縣市名稱使用。來源為[政府資料開放平臺縣市界線資料集](https://data.gov.tw/dataset/7442)，依政府資料開放授權條款第 1 版釋出。若重建縣市欄位，取得 WGS84 GeoJSON 後執行：
+`site/data/spots.json` 的 `county` 欄位由泊點座標對應至內政部國土測繪中心縣市界線，供離線搜尋縣市名稱使用。若縣市界線重疊，會優先採用範圍較小的行政區，以避免臺北市被誤標為新北市、嘉義市被誤標為嘉義縣。來源為[政府資料開放平臺縣市界線資料集](https://data.gov.tw/dataset/7442)，依政府資料開放授權條款第 1 版釋出。若重建縣市欄位，取得 WGS84 GeoJSON 後執行：
 
 ```powershell
 node tools/enrich-spot-counties.mjs ..\data\tw-counties.geojson ..\data\spots.json site\data\spots.json
