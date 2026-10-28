@@ -405,23 +405,7 @@
         fillColor: markerColor(spot),
         fillOpacity: 0.9
       }).addTo(markerLayer);
-      marker.on("tooltipopen", event => {
-        const label = event.tooltip.getElement();
-        if (!label || label.dataset.spotLabelBound) return;
-        label.dataset.spotLabelBound = "true";
-        label.setAttribute("role", "button");
-        label.setAttribute("tabindex", "0");
-        label.setAttribute("aria-label", `開啟${spot.name}泊點資訊`);
-        const openDetails = clickEvent => {
-          if (clickEvent.type === "keydown" && clickEvent.key !== "Enter" && clickEvent.key !== " ") return;
-          if (clickEvent.type === "keydown") clickEvent.preventDefault();
-          L.DomEvent.stopPropagation(clickEvent);
-          openSpotDialog(spot);
-        };
-        label.addEventListener("click", openDetails);
-        label.addEventListener("keydown", openDetails);
-      });
-      marker.bindTooltip(escapeHtml(spot.name), { direction: "top", className: "spot-label", opacity: 0.96 });
+      marker.bindTooltip(escapeHtml(spot.name), { direction: "top", className: "spot-label", opacity: 0.96, interactive: true });
       marker.on("click", () => openSpotDialog(spot));
     }
     if (userPosition) {
@@ -446,7 +430,8 @@
         direction: "top",
         className: "spot-label",
         opacity: 0.96,
-        permanent: shouldShow
+        permanent: shouldShow,
+        interactive: true
       });
       if (shouldShow) marker.openTooltip();
     });
