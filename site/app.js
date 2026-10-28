@@ -112,6 +112,23 @@
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   }
 
+  function googleSpotSearchUrl(spot) {
+    const coordinates = `${Number(spot.lat).toFixed(6)},${Number(spot.lon).toFixed(6)}`;
+    const county = spot.county || countyAtPoint(Number(spot.lon), Number(spot.lat));
+    const locality = county ? `, ${county}` : "";
+    const query = `${spot.name} near ${coordinates}${locality}, Taiwan`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  }
+
+  function hasManualLocationOverride(spot) {
+    if (spot?.locationOverride === true) return true;
+    const id = String(spot?.id || "");
+    const match = /^(-?\d+(?:\.\d+)?)_(-?\d+(?:\.\d+)?)$/.exec(id);
+    if (!match) return false;
+    const sourceCoordinates = stableId(Number(match[1]), Number(match[2]));
+    return stableId(Number(spot.lat), Number(spot.lon)) !== sourceCoordinates;
+  }
+
   function mapsDirectionsUrl(origin, destination) {
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=driving`;
   }
@@ -166,7 +183,10 @@
     }));
     for (const spot of saved) {
       const baseSpot = merged.get(spot.id);
-      merged.set(spot.id, baseSpot ? { ...baseSpot, ...spot, county: baseSpot.county || spot.county } : spot);
+      const locationOverride = hasManualLocationOverride(spot);
+      merged.set(spot.id, baseSpot
+        ? { ...baseSpot, ...spot, locationOverride, county: baseSpot.county || spot.county }
+        : { ...spot, locationOverride });
     }
     for (const temple of templeToiletData?.temples || []) {
       if (temple.id && !merged.has(temple.id)) merged.set(temple.id, temple);
@@ -477,7 +497,7 @@
       <div class="spot-card-head"><button class="spot-title" type="button" data-action="details" data-id="${escapeHtml(spot.id)}">${escapeHtml(spot.name)}</button><button class="favorite-button ${saved ? "saved" : ""}" type="button" data-action="favorite" data-id="${escapeHtml(spot.id)}" aria-label="${saved ? "取消收藏" : "收藏"}">${saved ? "♥" : "♡"}</button></div>
       <p class="spot-coords">${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}${distance ? `　·　${distance.replace(/<[^>]*>/g, "")}` : ""}</p>
       <div class="spot-badges">${county}${categoryBadge}${waterBadge}${toiletBadge}${hot}${photo}</div>
-      <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="attractions" data-id="${escapeHtml(spot.id)}">附近景點</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
+      <div class="spot-actions"><button class="mini-action" type="button" data-action="food" data-id="${escapeHtml(spot.id)}">附近美食</button><button class="mini-action" type="button" data-action="attractions" data-id="${escapeHtml(spot.id)}">附近景點</button><button class="mini-action" type="button" data-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button><a class="mini-action google" href="${googleSpotSearchUrl(spot)}" target="_blank" rel="noopener">Google 地點／評價 ↗</a></div>
     </article>`;
   }
 
@@ -581,7 +601,9 @@
     if (photoValue && !photo) return notify("圖片連結須使用 http 或 https 網址。");
     const coordinateConflict = spots.find(spot => spot.id !== original.id && Number(spot.lat) === lat && Number(spot.lon) === lon);
     if (coordinateConflict) return notify(`這組座標已屬於「${coordinateConflict.name}」，請確認後再儲存。`);
-    const updated = withResolvedCounty({ ...original, name, lat, lon, hot: $("#spotUpdateHot").value.trim(), photo });
+    const locationOverride = hasManualLocationOverride(original)
+      || stableId(lat, lon) !== stableId(original.lat, original.lon);
+    const updated = withResolvedCounty({ ...original, name, lat, lon, locationOverride, hot: $("#spotUpdateHot").value.trim(), photo });
     try {
       await dbPut("spots", updated);
       spots = spots.map(spot => spot.id === original.id ? updated : spot).sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
@@ -810,7 +832,7 @@
     const waterSourceUrl = safeWebUrl(spot.officialSourceUrl);
     const waterSection = spot.waterType ? `<div class="dialog-section"><h3>${escapeHtml(spot.waterLabel || "近水位置")}</h3><p>${escapeHtml(spot.accessEvidence || "依公開地圖名稱整理的水域附近線索；實際道路、步行距離與停車請現場確認。")}</p><p>此分類不判定是否可戲水，也不代表車輛可抵達水岸、可停車或允許車宿。</p>${waterSourceUrl ? `<a href="${escapeHtml(waterSourceUrl)}" target="_blank" rel="noopener">${escapeHtml(spot.officialSourceTitle || "查看官方地點資料")} ↗</a>` : ""}</div>` : "";
     const content = $("#dialogContent");
-    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">${titleLabel}</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}${spot.address ? ` · ${escapeHtml(spot.address)}` : ""}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${waterBadge}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSearchUrl(spot.name, spot.lat, spot.lon)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>${spot.category === "temple-restroom" ? "地點說明" : spot.category === "waterfront" ? "近水景點資訊" : "泊點資訊"}</h3><p>${spotDetails}</p></div>${waterSection}${restroomSection}</div>`;
+    content.innerHTML = `<div class="dialog-body"><p class="dialog-eyebrow">${titleLabel}</p><h2>${escapeHtml(spot.name)}</h2><p class="dialog-coords">${Number(spot.lat).toFixed(6)}, ${Number(spot.lon).toFixed(6)}${spot.address ? ` · ${escapeHtml(spot.address)}` : ""}</p><div class="dialog-badges">${spot.county ? `<span class="badge">${escapeHtml(spot.county)}</span>` : ""}${waterBadge}${distance}${hot}${spot.photo ? `<span class="badge">來源附有圖片</span>` : ""}</div>${photo}<div class="dialog-actions"><a class="button button-primary" href="${googleSpotSearchUrl(spot)}" target="_blank" rel="noopener">Google 地點與評價 ↗</a><button class="button button-light" type="button" data-dialog-action="food" data-id="${escapeHtml(spot.id)}">搜尋附近美食</button><button class="button button-light" type="button" data-dialog-action="map" data-id="${escapeHtml(spot.id)}">地圖定位</button></div><div class="dialog-section"><h3>${spot.category === "temple-restroom" ? "地點說明" : spot.category === "waterfront" ? "近水景點資訊" : "泊點資訊"}</h3><p>${spotDetails}</p></div>${waterSection}${restroomSection}</div>`;
     const dialog = $("#spotDialog");
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -1413,12 +1435,22 @@
       if (!incoming.length) throw new Error("找不到有效點位；請確認有點位名稱、緯度和經度欄位。");
       const merged = new Map(spots.map(spot => [spot.id, spot]));
       let added = 0;
+      let preservedLocations = 0;
       const savedIncoming = [];
       for (const spot of incoming) {
         const sameCoordinates = [...merged.values()].find(existing => Number(existing.lat) === spot.lat && Number(existing.lon) === spot.lon);
+        const sameId = merged.get(spot.id);
         const targetId = sameCoordinates?.id || spot.id;
         if (!sameCoordinates && !merged.has(targetId)) added++;
-        const updated = withResolvedCounty({ ...spot, id: targetId });
+        const preserveLocation = Boolean(sameId && hasManualLocationOverride(sameId)
+          && (!sameCoordinates || sameCoordinates.id === sameId.id));
+        if (preserveLocation) preservedLocations++;
+        const updated = withResolvedCounty({
+          ...(sameCoordinates || sameId || {}),
+          ...spot,
+          id: targetId,
+          ...(preserveLocation ? { lat: sameId.lat, lon: sameId.lon, locationOverride: true } : {})
+        });
         merged.set(targetId, updated);
         savedIncoming.push(updated);
       }
@@ -1430,7 +1462,7 @@
       renderSpotUpdateSearch();
       visibleCount = PAGE_SIZE;
       renderSpots();
-      status.textContent = `已匯入 ${incoming.length} 筆；新增 ${added} 筆，其他同座標資料已更新。本次變更存在此瀏覽器。`;
+      status.textContent = `已匯入 ${incoming.length} 筆；新增 ${added} 筆，其他同座標資料已更新；${preservedLocations} 筆手動校正座標已保留。本次變更存在此瀏覽器。`;
       notify(`已匯入 ${incoming.length} 筆泊點資料。`);
     } catch (error) {
       status.textContent = error.message || "CSV 匯入失敗。";
@@ -1442,7 +1474,7 @@
 
   function exportCsv() {
     const headers = ["點位名稱", "緯度", "經度", "熱水欄位（原始值）", "圖片連結", "Google 地圖連結", "圖示樣式ID"];
-    const rows = spots.map(spot => [spot.name, spot.lat, spot.lon, spot.hot || "", spot.photo || "", `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lon}`, spot.style || ""]);
+    const rows = spots.map(spot => [spot.name, spot.lat, spot.lon, spot.hot || "", spot.photo || "", googleSpotSearchUrl(spot), spot.style || ""]);
     const csv = "\uFEFF" + [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n");
     downloadFile("車宿旅圖_泊點資料.csv", csv, "text/csv;charset=utf-8");
   }
