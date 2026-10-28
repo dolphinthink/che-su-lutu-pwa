@@ -3,7 +3,7 @@
 
   const DB_NAME = "che-su-lutu-v1";
   const SOURCE_KML_URL = "https://www.google.com/maps/d/kml?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg&forcekml=1";
-  const SPOT_DATA_URL = "./data/spots.json?v=20261028-1";
+  const SPOT_DATA_URL = "./data/spots.json?v=20261028-2";
   const COUNTY_BOUNDARY_DATA_URL = "./data/tw-counties.geojson?v=20261028-1";
   const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-6";
   const WATERFRONT_DATA_URL = "./data/waterfront-points.json?v=20261022-6";

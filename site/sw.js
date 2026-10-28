@@ -1,9 +1,9 @@
-const CACHE_NAME = "che-su-lutu-shell-v22";
+const CACHE_NAME = "che-su-lutu-shell-v23";
 const CORE_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=20261028-8",
+  "./app.js?v=20261028-9",
   "./manifest.webmanifest"
 ];
 const OPTIONAL_SHELL = [
@@ -13,7 +13,7 @@ const OPTIONAL_SHELL = [
   "./assets/icon-512.png",
   "./assets/vendor/leaflet.css",
   "./assets/vendor/leaflet.js",
-  "./data/spots.json?v=20261028-1",
+  "./data/spots.json?v=20261028-2",
   "./data/tw-counties.geojson?v=20261028-1",
   "./data/temple-toilets.json?v=20261022-6",
   "./data/waterfront-points.json?v=20261022-6",
