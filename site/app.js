@@ -8,13 +8,11 @@
   const TEMPLE_DATA_URL = "./data/temple-toilets.json?v=20261022-6";
   const WATERFRONT_DATA_URL = "./data/waterfront-points.json?v=20261022-6";
   const FOOD_DATA_URL = "./data/restaurant-directory.json?v=20261022-7";
-  const PARTNER_DATA_URL = "./data/partners.json";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
   const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
   const PAGE_SIZE = 36;
-  const PARTNER_PAGE_SIZE = 18;
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -24,10 +22,7 @@
   let templeToiletData = null;
   let waterfrontData = null;
   let foodDirectoryPromise;
-  let partnerSpots = [];
-  let partnerFoods = [];
   let visibleCount = PAGE_SIZE;
-  let visiblePartnerCount = PARTNER_PAGE_SIZE;
   let userPosition = null;
   let map;
   let markerLayer;
@@ -94,11 +89,6 @@
       const url = new URL(String(value || ""));
       return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
     } catch { return ""; }
-  }
-
-  function phoneHref(value) {
-    const number = String(value || "").replace(/^tel\s*/i, "").replace(/[^+\d]/g, "");
-    return /^[+\d]{7,}$/.test(number) ? `tel:${number}` : "";
   }
 
   function stableId(lat, lon) {
@@ -207,42 +197,10 @@
       waterfrontToggle.textContent = `🌊 溪河海 ${count.toLocaleString("zh-TW")}`;
       waterfrontToggle.disabled = !count;
     }
-    await loadPartnerDirectory();
     fillSpotSelectors();
     renderSpots();
     renderSpotUpdateSearch();
     renderReports();
-  }
-
-  async function loadPartnerDirectory() {
-    try {
-      const response = await fetch(PARTNER_DATA_URL);
-      if (!response.ok) throw new Error("無法讀取特約資料。");
-      const data = await response.json();
-      partnerSpots = (Array.isArray(data.stays) ? data.stays : []).filter(item => item?.id && item?.name && safeWebUrl(item.mapUrl));
-      partnerFoods = (Array.isArray(data.food) ? data.food : []).filter(item => item?.id && item?.name && safeWebUrl(item.mapUrl));
-      const regions = [...new Set(partnerSpots.map(item => String(item.region || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
-      $("#partnerRegionSelect").innerHTML = `<option value="all">全台</option>${regions.map(region => `<option value="${escapeHtml(region)}">${escapeHtml(region)}</option>`).join("")}`;
-      const notes = Array.isArray(data.source?.notes) ? data.source.notes : [];
-      $("#partnerNoticeText").textContent = notes.join(" ");
-      $("#partnerSourceMeta").textContent = `資料擷取日期：${data.source?.fetchedOn || "未提供"} · ${data.source?.title || "社團試算表"}`;
-      const sourceUrl = safeWebUrl(data.source?.spreadsheetUrl);
-      if (sourceUrl) {
-        const link = new URL(sourceUrl);
-        if (data.source?.linkedGid != null) {
-          link.searchParams.set("gid", String(data.source.linkedGid));
-          link.hash = `gid=${encodeURIComponent(String(data.source.linkedGid))}`;
-        }
-        $("#partnerSourceLink").href = link.href;
-      }
-      renderPartnerSpots();
-      renderPartnerFoods();
-    } catch (error) {
-      $("#partnerCount").textContent = "特約資料無法載入";
-      $("#partnerSpotList").innerHTML = `<div class="empty-state"><strong>暫時無法讀取特約棧點</strong><p>${escapeHtml(error.message)}</p></div>`;
-      $("#partnerFoodCount").textContent = "特約餐飲無法載入";
-      $("#partnerFoodList").innerHTML = `<div class="empty-state"><strong>暫時無法讀取特約餐飲</strong></div>`;
-    }
   }
 
   function initMap() {
@@ -525,50 +483,6 @@
     $("#loadMore").hidden = results.length <= visibleCount;
     drawMapMarkers(results);
     if (focusResults) focusMapOnSpots(results);
-  }
-
-  function partnerKind(item) {
-    if (/車泊/.test(item.benefit || "")) return "車泊特約";
-    if (/餐飲|用餐|美食/.test(item.benefit || "")) return "餐飲優惠";
-    if (/民宿|住宿/.test(item.benefit || "")) return "住宿優惠";
-    return "其他特約";
-  }
-
-  function makePartnerSpotCard(item) {
-    const mapUrl = safeWebUrl(item.mapUrl);
-    const call = phoneHref(item.phone);
-    const phoneText = String(item.phone || "").replace(/^tel\s*/i, "").trim();
-    const area = [item.region, item.district].filter(Boolean).join(" · ");
-    const badges = `<span class="badge">${partnerKind(item)}</span>${item.updated ? `<span class="badge">資料日期 ${escapeHtml(item.updated)}</span>` : ""}`;
-    return `<article class="partner-card"><div class="partner-card-head"><div><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(area)}</p></div>${badges}</div><p class="partner-benefit">${escapeHtml(item.benefit || "特約內容請電話確認")}</p><div class="partner-actions">${call ? `<a class="mini-action" href="${escapeHtml(call)}">電話確認 ${escapeHtml(phoneText)}</a>` : ""}${mapUrl ? `<a class="mini-action google" href="${escapeHtml(mapUrl)}" target="_blank" rel="noopener">Google 地圖／評價 ↗</a>` : ""}</div></article>`;
-  }
-
-  function renderPartnerSpots() {
-    const list = $("#partnerSpotList");
-    if (!list) return;
-    const query = $("#partnerSearchInput").value.trim().toLocaleLowerCase("zh-Hant");
-    const region = $("#partnerRegionSelect").value;
-    const results = partnerSpots.filter(item => {
-      const text = `${item.name} ${item.region || ""} ${item.district || ""} ${item.benefit || ""} ${item.phone || ""}`.toLocaleLowerCase("zh-Hant");
-      return (region === "all" || item.region === region) && (!query || text.includes(query));
-    });
-    $("#partnerCount").textContent = `${results.length.toLocaleString("zh-TW")} 筆特約棧點${query || region !== "all" ? `（共 ${partnerSpots.length.toLocaleString("zh-TW")} 筆）` : ""}`;
-    list.innerHTML = results.slice(0, visiblePartnerCount).map(makePartnerSpotCard).join("") || `<div class="empty-state"><strong>找不到符合的特約棧點</strong><p>可改用店名、行政區或優惠內容搜尋。</p></div>`;
-    $("#partnerLoadMore").hidden = results.length <= visiblePartnerCount;
-  }
-
-  function renderPartnerFoods() {
-    const list = $("#partnerFoodList");
-    if (!list) return;
-    const query = $("#partnerFoodSearch").value.trim().toLocaleLowerCase("zh-Hant");
-    const results = partnerFoods.filter(item => `${item.name} ${item.area || ""} ${item.benefit || ""} ${item.phone || ""}`.toLocaleLowerCase("zh-Hant").includes(query));
-    $("#partnerFoodCount").textContent = `${results.length} 家優惠店家${query ? `（共 ${partnerFoods.length} 家）` : ""}`;
-    list.innerHTML = results.map(item => {
-      const call = phoneHref(item.phone);
-      const mapUrl = safeWebUrl(item.mapUrl);
-      const meta = [item.area, item.benefit, item.updated ? `資料日期 ${item.updated}` : ""].filter(Boolean).join(" · ");
-      return `<article class="food-result-card partner-food-card"><div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(meta)}</p>${call ? `<a class="partner-phone-link" href="${escapeHtml(call)}">電話確認 ${escapeHtml(item.phone.replace(/^tel\s*/i, ""))}</a>` : ""}</div>${mapUrl ? `<a class="food-link" href="${escapeHtml(mapUrl)}" target="_blank" rel="noopener">Google 地圖／評價 ↗</a>` : ""}</article>`;
-    }).join("") || `<div class="empty-state"><strong>找不到特約餐飲</strong><p>試試店名、地區或優惠關鍵字。</p></div>`;
   }
 
   function fillSpotSelectors() {
@@ -1435,10 +1349,6 @@
 
   function bindEvents() {
     $$(".nav-item").forEach(button => button.addEventListener("click", () => switchTab(button.dataset.tab)));
-    $("#partnerSearchInput").addEventListener("input", () => { visiblePartnerCount = PARTNER_PAGE_SIZE; renderPartnerSpots(); });
-    $("#partnerRegionSelect").addEventListener("change", () => { visiblePartnerCount = PARTNER_PAGE_SIZE; renderPartnerSpots(); });
-    $("#partnerLoadMore").addEventListener("click", () => { visiblePartnerCount += PARTNER_PAGE_SIZE; renderPartnerSpots(); });
-    $("#partnerFoodSearch").addEventListener("input", renderPartnerFoods);
     $("#searchInput").addEventListener("input", () => { visibleCount = PAGE_SIZE; renderSpots(true); });
     $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; visibleCount = PAGE_SIZE; renderSpots(true); $("#searchInput").focus(); });
     $("#resetSpotFilters").addEventListener("click", () => {
@@ -1570,7 +1480,7 @@
     initMap();
     await loadSpots();
     const requestedTab = location.hash.slice(1);
-    if (["find", "partners", "plan", "food", "updates"].includes(requestedTab)) switchTab(requestedTab);
+    if (["find", "plan", "food", "updates"].includes(requestedTab)) switchTab(requestedTab);
   }
 
   init().catch(error => {

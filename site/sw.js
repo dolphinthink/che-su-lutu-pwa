@@ -1,9 +1,9 @@
-const CACHE_NAME = "che-su-lutu-shell-v23";
+const CACHE_NAME = "che-su-lutu-shell-v24";
 const CORE_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js?v=20261028-9",
+  "./app.js?v=20261028-10",
   "./manifest.webmanifest"
 ];
 const OPTIONAL_SHELL = [
@@ -17,8 +17,7 @@ const OPTIONAL_SHELL = [
   "./data/tw-counties.geojson?v=20261028-1",
   "./data/temple-toilets.json?v=20261022-6",
   "./data/waterfront-points.json?v=20261022-6",
-  "./data/restaurant-directory.json?v=20261022-7",
-  "./data/partners.json"
+  "./data/restaurant-directory.json?v=20261022-7"
 ];
 
 const OFFLINE_PAGE = `<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#174d43"><title>車宿旅圖｜暫時離線</title><body style="margin:0;background:#f7f8f5;color:#174d43;font:16px system-ui,sans-serif"><main style="max-width:34rem;margin:18vh auto;padding:2rem"><h1>目前無法連線</h1><p>車宿旅圖的離線首頁尚未載入。請確認手機網路後再重試；連線恢復後，也可以直接用 Chrome 開啟網站更新離線資料。</p><button style="padding:.8rem 1.2rem;border:0;border-radius:.7rem;background:#174d43;color:white;font:inherit" onclick="location.reload()">重新連線</button></main></body></html>`;

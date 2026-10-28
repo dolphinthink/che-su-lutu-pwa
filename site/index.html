@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261028-9"></script>
+  <script defer src="./app.js?v=20261028-10"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -31,7 +31,6 @@
 
     <nav class="main-nav" aria-label="主要功能">
       <button class="nav-item active" type="button" data-tab="find"><span>⌖</span>找泊點</button>
-      <button class="nav-item" type="button" data-tab="partners"><span>⌂</span>特約</button>
       <button class="nav-item" type="button" data-tab="plan"><span>➤</span>排行程</button>
       <button class="nav-item" type="button" data-tab="food"><span>♨</span>附近美食</button>
       <button class="nav-item" type="button" data-tab="updates"><span>＋</span>資料更新</button>
@@ -76,19 +75,6 @@
         <p class="source-note">泊點來自車床天地公開總圖；廟宇／公廁補充資料來自環境部全國公廁建檔資料；溪、河、海周邊點依泊點名稱和交通部觀光署公開座標整理。近水分類不代表車輛可開到水岸、可停車或允許過夜，也不以戲水條件篩選；請依現場標示及管理規定確認。<a href="https://media.taiwan.net.tw/zh-tw/portal/travel?Tab=Attraction" target="_blank" rel="noopener">交通部觀光署資料來源 ↗</a></p>
       </section>
 
-      <section class="view" id="view-partners" aria-labelledby="partnersTitle">
-        <div class="page-heading"><div><p class="eyebrow">COMMUNITY PARTNERS</p><h1 id="partnersTitle">社團特約棧點</h1><p class="muted">搜尋全台特約車泊、營地與住宿優惠，查看聯絡方式並開啟 Google 地圖。</p></div></div>
-        <div class="panel partner-notice"><strong>出發前先電話確認</strong><p id="partnerNoticeText">特約項目和價格來自社團表格，僅供會員參考；連續假日可能不適用優惠，請先向店家確認。</p><div class="partner-source-line"><a id="partnerSourceLink" href="https://docs.google.com/spreadsheets/d/18R0l9oKejZ0O8pzw9Nz0mREEcUW5x5eWIItBlyvEPfI/edit?gid=2120308638#gid=2120308638" target="_blank" rel="noopener">查看來源試算表 ↗</a><small id="partnerSourceMeta"></small></div></div>
-        <div class="partner-filter-row">
-          <label class="partner-search"><span aria-hidden="true">⌕</span><input id="partnerSearchInput" type="search" placeholder="搜尋棧點、縣市、行政區或優惠" autocomplete="off"></label>
-          <label class="select-wrap"><span>地區</span><select id="partnerRegionSelect" aria-label="特約地區"><option value="all">全台</option></select></label>
-          <span class="result-count" id="partnerCount">讀取特約資料中…</span>
-        </div>
-        <div id="partnerSpotList" class="partner-grid" aria-live="polite"></div>
-        <button id="partnerLoadMore" class="button button-more" type="button" hidden>載入更多特約棧點</button>
-        <p class="source-note">特約棧點尚未提供經緯度，因此不會出現在地圖標記或自動行程距離排序中；請用地圖連結確認位置與導航。</p>
-      </section>
-
       <section class="view" id="view-plan" aria-labelledby="planTitle">
         <div class="page-heading"><div><p class="eyebrow">SMART ROUTE</p><h1 id="planTitle">依需求排一趟車宿行程</h1><p class="muted">輸入天數、出發點和想去的地方，先排出每天的泊點建議。</p></div></div>
         <form class="panel plan-form" id="planForm">
@@ -106,7 +92,7 @@
             <label><input type="checkbox" name="pref" value="service">服務區／休息站</label>
           </fieldset>
           <button class="button button-primary button-wide" type="submit">規劃我的行程 <span>→</span></button>
-          <p class="form-disclaimer">行程依泊點名稱和座標估算直線距離，不等於道路里程；特約名錄未提供座標，尚未納入自動排序。設施、營業和車泊規定請另外確認。</p>
+          <p class="form-disclaimer">行程依泊點名稱和座標估算直線距離，不等於道路里程。設施、營業和車泊規定請另外確認。</p>
         </form>
         <div id="itinerary" class="itinerary" aria-live="polite"><div class="empty-state"><span class="empty-icon">✳</span><strong>你的行程會顯示在這裡</strong><p>先填寫天數和偏好，再按「規劃我的行程」。</p></div></div>
       </section>
@@ -120,12 +106,6 @@
         </div>
         <div id="foodResults" class="food-results"><div class="empty-state"><span class="empty-icon">♨</span><strong>選擇泊點開始搜尋</strong><p>附近店家搜尋需要網路連線。</p></div></div>
         <div class="osm-credit">店家資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
-        <section class="partner-food-directory" aria-labelledby="partnerFoodTitle">
-          <div class="section-heading"><div><h2 id="partnerFoodTitle">全台特約餐飲優惠</h2><span id="partnerFoodCount">讀取特約餐飲中…</span></div></div>
-          <label class="partner-search food-partner-search"><span aria-hidden="true">⌕</span><input id="partnerFoodSearch" type="search" placeholder="搜尋店名、地區或優惠" autocomplete="off"></label>
-          <div id="partnerFoodList" class="partner-food-list" aria-live="polite"></div>
-          <p class="data-source-hint">特約餐飲沒有距離座標，請依地區搜尋並先致電確認優惠；點 Google 地圖查看地點介紹與評價。</p>
-        </section>
       </section>
 
       <section class="view" id="view-updates" aria-labelledby="updatesTitle">
@@ -189,7 +169,7 @@
       </section>
     </main>
 
-    <footer class="app-footer"><span>車宿旅圖 · 公開泊點＋社團特約資料整理版</span><a href="https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg" target="_blank" rel="noopener">來源地圖 ↗</a></footer>
+    <footer class="app-footer"><span>車宿旅圖 · 公開泊點與旅程工具</span><a href="https://www.google.com/maps/d/viewer?mid=1Q3JWYBEf6JQC8M4ei6cEojTesjg" target="_blank" rel="noopener">來源地圖 ↗</a></footer>
   </div>
 
   <dialog id="spotDialog" class="spot-dialog">
