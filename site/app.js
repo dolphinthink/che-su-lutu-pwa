@@ -11,6 +11,7 @@
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
   const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
+  const MAP_SPOT_LABEL_ZOOM = 12;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
   const ATTRACTION_TTL = 6 * 60 * 60 * 1000;
   const PAGE_SIZE = 36;
@@ -211,6 +212,7 @@
     map = L.map("map", { zoomControl: true, scrollWheelZoom: false, preferCanvas: true }).setView([23.72, 120.96], 7);
     map.attributionControl.addAttribution('<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org" target="_blank" rel="noopener">OpenMapTiles</a> · Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>');
     map.on("move zoom resize", syncMapBackground);
+    map.on("moveend zoomend", updateMapSpotLabels);
     markerLayer = L.layerGroup().addTo(map);
     drawMapMarkers();
     loadMapBackground();
@@ -410,6 +412,28 @@
       if (userMarker) userMarker.remove();
       userMarker = L.circleMarker([userPosition.lat, userPosition.lon], { radius: 8, weight: 3, color: "#fff", fillColor: "#3979de", fillOpacity: 1 }).addTo(map).bindTooltip("目前位置");
     }
+    updateMapSpotLabels();
+  }
+
+  function updateMapSpotLabels() {
+    if (!map || !markerLayer) return;
+    const labelsEnabled = map.getZoom() >= MAP_SPOT_LABEL_ZOOM;
+    const bounds = labelsEnabled ? map.getBounds().pad(0.08) : null;
+    markerLayer.eachLayer(marker => {
+      const tooltip = marker.getTooltip();
+      if (!tooltip) return;
+      const shouldShow = labelsEnabled && bounds.contains(marker.getLatLng());
+      if (tooltip.options.permanent === shouldShow) return;
+      const content = tooltip.getContent();
+      marker.unbindTooltip();
+      marker.bindTooltip(content, {
+        direction: "top",
+        className: "spot-label",
+        opacity: 0.96,
+        permanent: shouldShow
+      });
+      if (shouldShow) marker.openTooltip();
+    });
   }
 
   function getFilteredSpots(applyRadius = true) {
