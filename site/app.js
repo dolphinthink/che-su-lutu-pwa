@@ -10,6 +10,7 @@
   const FOOD_DATA_URL = "./data/restaurant-directory.json?v=20261022-7";
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
+  const MAPLIBRE_STYLESHEET_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css";
   const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
   const MAP_SPOT_LABEL_ZOOM = 12;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
@@ -30,6 +31,7 @@
   let markerLayer;
   let userMarker;
   let mapBackground;
+  let mapLibreStylesheetPromise;
   let installPrompt = null;
   let toastTimer;
   let foodRequestInProgress = false;
@@ -155,8 +157,17 @@
   async function loadSpots() {
     const dataUrl = new URL(SPOT_DATA_URL, document.baseURI);
     let response;
+    let countyBoundaryData;
+    const optionalJson = url => fetch(new URL(url, document.baseURI))
+      .then(result => result.ok ? result.json() : null)
+      .catch(() => null);
     try {
-      response = await fetch(dataUrl);
+      [response, countyBoundaryData, templeToiletData, waterfrontData] = await Promise.all([
+        fetch(dataUrl),
+        optionalJson(COUNTY_BOUNDARY_DATA_URL),
+        optionalJson(TEMPLE_DATA_URL),
+        optionalJson(WATERFRONT_DATA_URL)
+      ]);
     } catch {
       if (location.protocol === "file:") {
         throw new Error("目前是直接開啟 index.html，瀏覽器無法讀取泊點資料。請在車宿資料夾執行「啟動車宿旅圖.ps1」，再開啟 http://localhost:8000/。");
@@ -167,13 +178,7 @@
       throw new Error(`泊點資料回應 HTTP ${response.status}。請確認部署內容包含 data/spots.json，且網址位於 PWA 專案根目錄。`);
     }
     const base = await response.json();
-    const countyBoundaryResponse = await fetch(new URL(COUNTY_BOUNDARY_DATA_URL, document.baseURI)).catch(() => null);
-    const countyBoundaryData = countyBoundaryResponse?.ok ? await countyBoundaryResponse.json().catch(() => null) : null;
     countyBoundaries = (countyBoundaryData?.features || []).map(createCountyBoundary).filter(Boolean).sort((a, b) => a.area - b.area);
-    const templeResponse = await fetch(new URL(TEMPLE_DATA_URL, document.baseURI)).catch(() => null);
-    templeToiletData = templeResponse?.ok ? await templeResponse.json().catch(() => null) : null;
-    const waterfrontResponse = await fetch(new URL(WATERFRONT_DATA_URL, document.baseURI)).catch(() => null);
-    waterfrontData = waterfrontResponse?.ok ? await waterfrontResponse.json().catch(() => null) : null;
     const spotUpdates = new Map((templeToiletData?.spotUpdates || []).map(update => [update.id, update.toiletInfo]));
     const saved = await dbAll("spots").catch(() => []);
     const merged = new Map(base.map(spot => {
@@ -185,7 +190,7 @@
       const baseSpot = merged.get(spot.id);
       const locationOverride = hasManualLocationOverride(spot);
       merged.set(spot.id, baseSpot
-        ? { ...baseSpot, ...spot, locationOverride, county: baseSpot.county || spot.county }
+        ? { ...baseSpot, ...spot, locationOverride, county: locationOverride ? spot.county : (baseSpot.county || spot.county) }
         : { ...spot, locationOverride });
     }
     for (const temple of templeToiletData?.temples || []) {
@@ -207,7 +212,7 @@
     }
     spots = [...merged.values()]
       .filter(spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)))
-      .map(withResolvedCounty);
+      .map(spot => withResolvedCounty(spot, !spot.county || hasManualLocationOverride(spot)));
     spots.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     const templeToggle = $("#templeFacilitiesToggle");
     if (templeToggle) {
@@ -271,7 +276,17 @@
       mapBackground = null;
     }
     try {
-      const maplibregl = await import(MAPLIBRE_MODULE_URL);
+      let timeoutId;
+      const mapAssets = Promise.all([
+        import(MAPLIBRE_MODULE_URL),
+        loadMapLibreStylesheet()
+      ]);
+      const [maplibregl] = await Promise.race([
+        mapAssets,
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("地圖資源載入逾時")), 12000);
+        })
+      ]).finally(() => clearTimeout(timeoutId));
       let mapHadError = false;
       mapBackground = new maplibregl.Map({
         container: "mapBase",
@@ -302,6 +317,30 @@
     } finally {
       retryButton.disabled = false;
     }
+  }
+
+  function loadMapLibreStylesheet() {
+    if (mapLibreStylesheetPromise) return mapLibreStylesheetPromise;
+    mapLibreStylesheetPromise = new Promise((resolve, reject) => {
+      let stylesheet = $("link[data-maplibre-stylesheet]");
+      if (stylesheet?.dataset.status === "loaded") return resolve();
+      if (stylesheet) stylesheet.remove();
+      stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = MAPLIBRE_STYLESHEET_URL;
+      stylesheet.dataset.maplibreStylesheet = "true";
+      stylesheet.addEventListener("load", () => {
+        stylesheet.dataset.status = "loaded";
+        resolve();
+      }, { once: true });
+      stylesheet.addEventListener("error", () => {
+        stylesheet.dataset.status = "error";
+        mapLibreStylesheetPromise = null;
+        reject(new Error("地圖樣式載入失敗"));
+      }, { once: true });
+      document.head.append(stylesheet);
+    });
+    return mapLibreStylesheetPromise;
   }
 
   function markerColor(spot) {
@@ -401,10 +440,14 @@
     return "";
   }
 
-  function withResolvedCounty(spot) {
-    const county = countyAtPoint(Number(spot.lon), Number(spot.lat));
-    const resolved = county ? { ...spot, county } : spot;
-    spotCountiesByCoordinates.set(resolved, county);
+  function withResolvedCounty(spot, forceRecalculate = false) {
+    const savedCounty = String(spot.county || "").trim();
+    const county = !forceRecalculate && savedCounty
+      ? savedCounty
+      : countyAtPoint(Number(spot.lon), Number(spot.lat));
+    const resolvedCounty = county || savedCounty;
+    const resolved = resolvedCounty && resolvedCounty !== spot.county ? { ...spot, county: resolvedCounty } : spot;
+    spotCountiesByCoordinates.set(resolved, resolvedCounty);
     return resolved;
   }
 
@@ -603,7 +646,8 @@
     if (coordinateConflict) return notify(`這組座標已屬於「${coordinateConflict.name}」，請確認後再儲存。`);
     const locationOverride = hasManualLocationOverride(original)
       || stableId(lat, lon) !== stableId(original.lat, original.lon);
-    const updated = withResolvedCounty({ ...original, name, lat, lon, locationOverride, hot: $("#spotUpdateHot").value.trim(), photo });
+    const locationChanged = stableId(lat, lon) !== stableId(original.lat, original.lon);
+    const updated = withResolvedCounty({ ...original, name, lat, lon, locationOverride, hot: $("#spotUpdateHot").value.trim(), photo }, locationChanged);
     try {
       await dbPut("spots", updated);
       spots = spots.map(spot => spot.id === original.id ? updated : spot).sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
@@ -772,7 +816,7 @@
     const button = $("#addSelectedSourceSpots");
     button.disabled = true;
     try {
-      const normalizedAdded = added.map(withResolvedCounty);
+      const normalizedAdded = added.map(spot => withResolvedCounty(spot));
       for (const spot of normalizedAdded) await dbPut("spots", spot);
       spots = [...spots, ...normalizedAdded].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
       fillSpotSelectors();
@@ -1445,18 +1489,22 @@
         const preserveLocation = Boolean(sameId && hasManualLocationOverride(sameId)
           && (!sameCoordinates || sameCoordinates.id === sameId.id));
         if (preserveLocation) preservedLocations++;
+        const previous = sameCoordinates || sameId;
+        const nextLat = preserveLocation ? sameId.lat : spot.lat;
+        const nextLon = preserveLocation ? sameId.lon : spot.lon;
+        const locationChanged = Boolean(previous && stableId(previous.lat, previous.lon) !== stableId(nextLat, nextLon));
         const updated = withResolvedCounty({
           ...(sameCoordinates || sameId || {}),
           ...spot,
           id: targetId,
           ...(preserveLocation ? { lat: sameId.lat, lon: sameId.lon, locationOverride: true } : {})
-        });
+        }, locationChanged || !spot.county);
         merged.set(targetId, updated);
         savedIncoming.push(updated);
       }
       for (const spot of savedIncoming) await dbPut("spots", spot);
       spots = [...merged.values()]
-        .map(withResolvedCounty)
+        .map(spot => withResolvedCounty(spot, !spot.county || hasManualLocationOverride(spot)))
         .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
       fillSpotSelectors();
       renderSpotUpdateSearch();
