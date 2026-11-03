@@ -12,6 +12,7 @@
   const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
   const MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.mjs";
   const MAPLIBRE_STYLESHEET_URL = "https://unpkg.com/maplibre-gl@6.3.0/dist/maplibre-gl.css";
+  const FOOD_API_URL = "https://che-su-lutu-pwa.pages.dev/api/food";
   const MAPLIBRE_LEAFLET_ZOOM_OFFSET = -1;
   const MAP_SPOT_LABEL_ZOOM = 12;
   const FOOD_TTL = 6 * 60 * 60 * 1000;
@@ -38,6 +39,7 @@
   let toastTimer;
   let foodRequestInProgress = false;
   let foodSearchSequence = 0;
+  let lastFoodSearchKey = "";
   let attractionRequestInProgress = false;
   let attractionItemsByKey = new Map();
   let lastAttractionSearch = null;
@@ -936,6 +938,10 @@
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
     if (name === "find" && map) setTimeout(() => map.invalidateSize(), 50);
     if (name === "updates") renderReports();
+    if (name === "food") {
+      const key = `${$("#foodSpotSelect").value}_${$("#foodRadius").value}`;
+      if ($("#foodSpotSelect").value && key !== lastFoodSearchKey) queueMicrotask(searchFood);
+    }
     history.replaceState(null, "", `#${name}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1094,7 +1100,7 @@
 
   async function fetchFoodFromProxy(spot, radius, signal) {
     const params = new URLSearchParams({ lat: Number(spot.lat).toFixed(6), lon: Number(spot.lon).toFixed(6), radius: String(radius) });
-    const response = await fetch(`./api/food?${params}`, { signal, cache: "no-store", headers: { "Accept": "application/json" } });
+    const response = await fetch(`${FOOD_API_URL}?${params}`, { signal, cache: "no-store", headers: { "Accept": "application/json" } });
     if (!response.ok) {
       const error = new Error(`附近店家服務回應 ${response.status}`);
       error.status = response.status;
@@ -1109,6 +1115,7 @@
     if (!spot) return showFoodStatus("先選擇一個泊點", "回到找泊點頁面，也可以從任何泊點卡片直接開始搜尋。 ");
     const radius = Number($("#foodRadius").value);
     const key = `${spot.id}_${radius}`;
+    lastFoodSearchKey = key;
     const googleNearby = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`餐廳 near ${spot.lat},${spot.lon}`)}`;
     const searchSequence = ++foodSearchSequence;
     const isCurrentSearch = () => searchSequence === foodSearchSequence
@@ -1221,6 +1228,9 @@
       foodRequestInProgress = false;
       $("#searchFoodButton").disabled = false;
       $("#searchFoodButton").textContent = "搜尋附近美食";
+      const selectedSpot = $("#foodSpotSelect").value;
+      const selectedRadius = $("#foodRadius").value;
+      if (selectedSpot && `${selectedSpot}_${selectedRadius}` !== lastFoodSearchKey) queueMicrotask(searchFood);
     }
   }
 
@@ -1906,7 +1916,8 @@
       }
       planTrip();
     });
-    $("#foodSpotSelect").addEventListener("change", () => showFoodStatus("已選擇泊點", "按下搜尋附近美食開始查詢。"));
+    $("#foodSpotSelect").addEventListener("change", searchFood);
+    $("#foodRadius").addEventListener("change", searchFood);
     $("#searchFoodButton").addEventListener("click", searchFood);
     $("#attractionSpotSelect").addEventListener("change", () => showAttractionStatus("已選擇搜尋中心", "按下搜尋附近景點開始查詢。"));
     $("#searchAttractionsButton").addEventListener("click", searchNearbyAttractions);

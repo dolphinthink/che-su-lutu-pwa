@@ -1,6 +1,12 @@
 const CACHE_TTL_SECONDS = 60 * 60;
 const UPSTREAM_TIMEOUT_MS = 10000;
 const CACHE_ZONE = "che-su-lutu-food-v1";
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "Accept, Content-Type",
+  "access-control-max-age": "86400"
+};
 const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter"
@@ -9,8 +15,12 @@ const ENDPOINTS = [
 function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", ...headers }
+    headers: { "content-type": "application/json; charset=utf-8", ...CORS_HEADERS, ...headers }
   });
+}
+
+export async function onRequestOptions() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
 function boundedCoordinate(value, min, max) {
@@ -72,7 +82,7 @@ export async function onRequestGet({ request }) {
   const cacheKey = new Request(keyUrl.toString(), { method: "GET" });
   const cache = await caches.open(CACHE_ZONE);
   const cached = await cache.match(cacheKey);
-  if (cached) return new Response(cached.body, { status: 200, headers: { ...Object.fromEntries(cached.headers), "x-food-cache": "hit" } });
+  if (cached) return new Response(cached.body, { status: 200, headers: { ...Object.fromEntries(cached.headers), ...CORS_HEADERS, "x-food-cache": "hit" } });
 
   try {
     const result = await fetchUpstream(buildQuery(lat, lon, radius));
