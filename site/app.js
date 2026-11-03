@@ -37,6 +37,7 @@
   let installPrompt = null;
   let toastTimer;
   let foodRequestInProgress = false;
+  let foodSearchSequence = 0;
   let attractionRequestInProgress = false;
   let attractionItemsByKey = new Map();
   let lastAttractionSearch = null;
@@ -1109,43 +1110,80 @@
     const radius = Number($("#foodRadius").value);
     const key = `${spot.id}_${radius}`;
     const googleNearby = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`餐廳 near ${spot.lat},${spot.lon}`)}`;
+    const searchSequence = ++foodSearchSequence;
+    const isCurrentSearch = () => searchSequence === foodSearchSequence
+      && $("#foodSpotSelect").value === spot.id
+      && Number($("#foodRadius").value) === radius;
     foodRequestInProgress = true;
     $("#searchFoodButton").disabled = true;
     $("#searchFoodButton").textContent = "搜尋中…";
-    showFoodStatus("正在載入附近餐飲", "先讀取已下載的餐飲目錄，再嘗試更新地圖資料。", googleNearby);
+    showFoodStatus("正在載入附近餐飲", "先顯示本機已存資料；餐飲目錄與即時地圖資料會在背景更新。", googleNearby);
+    let cached = null;
+    let cachedFoods = [];
+    let directoryFoods = [];
+    let liveFoods = [];
+    let directorySource = "";
+    let liveError = null;
+    let liveResolved = false;
+    let liveSucceeded = false;
+    let hasFreshCache = false;
+    let isOffline = false;
     let fallbackFoods = [];
-    let fallbackOptions = {};
+    const renderAvailableFoods = () => {
+      if (!isCurrentSearch()) return;
+      const foods = mergeFoodResults(directoryFoods, cachedFoods, liveFoods);
+      fallbackFoods = foods;
+      if (!foods.length) {
+        if (!liveResolved) return;
+        if (liveError) showFoodStatus(foodErrorTitle(liveError), "店家資料服務可能暫時忙碌或網路連線不穩；可稍後重試，也可直接用 Google 地圖搜尋附近餐廳與評價。", googleNearby);
+        else renderFoodResults([], spot, radius);
+        return;
+      }
+      const message = liveError
+        ? `${foodErrorTitle(liveError)}，仍顯示可用的目錄／上次查詢資料。`
+        : isOffline ? "目前離線，顯示本機餐飲目錄與先前查詢資料。"
+          : hasFreshCache ? "已先顯示本機資料。"
+            : liveResolved ? "" : "已先顯示可用資料，正在背景更新附近地圖資料…";
+      renderFoodResults(foods, spot, radius, {
+        staleAt: liveSucceeded || hasFreshCache ? 0 : (cached?.savedAt || 0),
+        directorySource,
+        message
+      });
+    };
     try {
-      const [cachedResult, directoryResult] = await Promise.allSettled([
-        dbGet("food", key),
-        loadFoodDirectory()
-      ]);
-      const cached = cachedResult.status === "fulfilled" ? cachedResult.value : null;
-      const directory = directoryResult.status === "fulfilled" ? directoryResult.value : null;
-      const directoryFoods = normalizeDirectoryFoods(directory?.points, spot, radius);
-      const cachedFoods = cached?.items || [];
-      const hasFreshCache = cached && Date.now() - cached.savedAt < FOOD_TTL;
-      let visibleFoods = mergeFoodResults(directoryFoods, cachedFoods);
-      const directorySource = directory ? "交通部觀光署" : "";
-      fallbackFoods = visibleFoods;
-      fallbackOptions = { staleAt: cached?.savedAt || 0, directorySource };
+      const cachedResult = await Promise.allSettled([dbGet("food", key)]);
+      cached = cachedResult[0].status === "fulfilled" ? cachedResult[0].value : null;
+      cachedFoods = Array.isArray(cached?.items) ? cached.items : [];
+      hasFreshCache = Boolean(cached && Date.now() - cached.savedAt < FOOD_TTL);
+
+      if (cachedFoods.length) {
+        fallbackFoods = cachedFoods;
+        renderFoodResults(cachedFoods, spot, radius, {
+          staleAt: hasFreshCache ? 0 : (cached?.savedAt || 0),
+          message: hasFreshCache ? "已先顯示本機資料，正在背景載入官方餐飲目錄…" : "已先顯示上次查詢資料，正在背景更新…"
+        });
+      }
+
+      loadFoodDirectory().then(directory => {
+        directoryFoods = normalizeDirectoryFoods(directory?.points, spot, radius);
+        directorySource = directory ? "交通部觀光署" : "";
+        renderAvailableFoods();
+      }).catch(() => []);
 
       if (hasFreshCache) {
-        renderFoodResults(visibleFoods, spot, radius, { directorySource });
+        if (cachedFoods.length) renderAvailableFoods();
+        else renderFoodResults([], spot, radius);
         return;
       }
       if (!navigator.onLine) {
-        if (visibleFoods.length) {
-          renderFoodResults(visibleFoods, spot, radius, { staleAt: cached?.savedAt || 0, directorySource, message: "目前離線，顯示本機餐飲目錄與先前查詢資料。" });
-        } else {
+        isOffline = true;
+        if (fallbackFoods.length) renderFoodResults(fallbackFoods, spot, radius, { staleAt: cached?.savedAt || 0, message: "目前離線，顯示本機先前查詢資料。" });
+        else {
           showFoodStatus("目前離線", "先前搜尋過的店家會保存在本機；重新連線後可再次查詢。", googleNearby);
         }
         return;
       }
-      if (visibleFoods.length) {
-        fallbackOptions.message = "即時地圖查詢尚未完成，先顯示餐飲目錄與上次查詢資料。";
-        renderFoodResults(visibleFoods, spot, radius, { ...fallbackOptions, message: "已先顯示餐飲目錄，正在背景更新附近地圖資料…" });
-      } else {
+      if (!fallbackFoods.length) {
         showFoodStatus("正在查詢附近店家", "目前沒有目錄店家，正在更新 OpenStreetMap 社群地圖。", googleNearby);
       }
 
@@ -1169,19 +1207,16 @@
       } finally {
         clearTimeout(timer);
       }
-      const items = normalizeFoodElements(data.elements, spot, radius);
-      await dbPut("food", { key, items, savedAt: Date.now() }).catch(() => {});
-      visibleFoods = mergeFoodResults(directoryFoods, items);
-      renderFoodResults(visibleFoods, spot, radius, { directorySource });
+      liveSucceeded = true;
+      liveFoods = normalizeFoodElements(data.elements, spot, radius);
+      liveResolved = true;
+      await dbPut("food", { key, items: liveFoods, savedAt: Date.now() }).catch(() => {});
+      renderAvailableFoods();
     } catch (error) {
-      if (fallbackFoods.length) {
-        renderFoodResults(fallbackFoods, spot, radius, {
-          ...fallbackOptions,
-          message: `${foodErrorTitle(error)}，仍顯示可用的目錄／上次查詢資料。`
-        });
-        return;
-      }
-      showFoodStatus(foodErrorTitle(error), "店家資料服務可能暫時忙碌或網路連線不穩；可稍後重試，也可直接用 Google 地圖搜尋附近餐廳與評價。", googleNearby);
+      liveError = error;
+      liveResolved = true;
+      if (!isCurrentSearch()) return;
+      renderAvailableFoods();
     } finally {
       foodRequestInProgress = false;
       $("#searchFoodButton").disabled = false;
