@@ -24,3 +24,9 @@
 .leaflet-tooltip.spot-label{font-size:11px;padding:3px 7px;max-width:min(320px,calc(100vw - 48px));white-space:nowrap!important;writing-mode:horizontal-tb!important;text-orientation:mixed!important;direction:ltr!important;overflow:hidden;text-overflow:ellipsis;line-height:1.3;pointer-events:auto;cursor:pointer}.leaflet-tooltip.spot-label:focus-visible{outline:2px solid #3979de;outline-offset:2px}@media(max-width:650px){.leaflet-tooltip.spot-label{font-size:10px;max-width:min(280px,calc(100vw - 32px))}}
 .attraction-actions{display:grid;grid-template-columns:minmax(130px,160px) minmax(150px,1fr) minmax(150px,1fr);gap:10px;align-items:end}.attraction-actions .field{margin-bottom:0}.attraction-actions .button{width:100%}.attraction-saved-toolbar{display:flex;align-items:center;gap:10px;margin-top:14px}.attraction-saved-toolbar .data-source-hint{margin:0}.attraction-card-actions{display:flex;flex-direction:column;align-items:stretch;gap:6px;flex:none}.attraction-card-actions .food-link{white-space:nowrap;text-align:center}.attraction-save{border:0;cursor:pointer}.attraction-save.saved{background:#f8ece3;color:#a55c39}
 @media(max-width:650px){.attraction-actions{grid-template-columns:1fr 1fr}.attraction-actions .compact-field{grid-column:1/-1;width:auto}.attraction-actions .button{width:100%;white-space:normal}.attraction-saved-toolbar{align-items:flex-start;flex-direction:column;gap:4px}}
+
+.food-actions{display:grid;grid-template-columns:minmax(140px,180px) minmax(120px,1fr) minmax(150px,1fr);align-items:end}
+.food-actions .field{margin-bottom:0}
+.food-actions .compact-field{width:auto}
+.food-actions .button{width:100%}
+@media(max-width:650px){.food-actions{grid-template-columns:1fr 1fr}.food-actions .compact-field{grid-column:1/-1;width:auto}.food-actions .button{width:100%;min-width:0}}

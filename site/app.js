@@ -595,13 +595,14 @@
     if (previousStart && [...start.options].some(option => option.value === previousStart)) start.value = previousStart;
     const food = $("#foodSpotSelect");
     const previousFood = food.value;
-    food.innerHTML = sorted.map(optionText).join("");
+    food.innerHTML = `${sorted.map(optionText).join("")}<option value="current">目前位置（先定位）</option>`;
     if (previousFood && [...food.options].some(option => option.value === previousFood)) food.value = previousFood;
     const attraction = $("#attractionSpotSelect");
     const previousAttraction = attraction.value;
     attraction.innerHTML = `<option value="current">目前位置（先定位）</option>${sorted.map(optionText).join("")}`;
     if (previousAttraction && [...attraction.options].some(option => option.value === previousAttraction)) attraction.value = previousAttraction;
     updateAttractionCurrentLocationOption();
+    updateFoodCurrentLocationOption();
     const datalist = $("#spotNameOptions");
     datalist.innerHTML = sorted.map(spot => `<option value="${escapeHtml(spot.name)}"></option>`).join("");
   }
@@ -612,6 +613,11 @@
 
   function updateAttractionCurrentLocationOption() {
     const option = $("#attractionSpotSelect option[value='current']");
+    if (option && userPosition) option.textContent = `目前位置 (${userPosition.lat.toFixed(5)}, ${userPosition.lon.toFixed(5)})`;
+  }
+
+  function updateFoodCurrentLocationOption() {
+    const option = $("#foodSpotSelect option[value='current']");
     if (option && userPosition) option.textContent = `目前位置 (${userPosition.lat.toFixed(5)}, ${userPosition.lon.toFixed(5)})`;
   }
 
@@ -901,6 +907,7 @@
   function setPosition(position) {
     userPosition = { lat: position.coords.latitude, lon: position.coords.longitude };
     updateAttractionCurrentLocationOption();
+    updateFoodCurrentLocationOption();
     if (userMarker) userMarker.remove();
     if (map) {
       userMarker = L.circleMarker([userPosition.lat, userPosition.lon], { radius: 8, weight: 3, color: "#fff", fillColor: "#3979de", fillOpacity: 1 }).addTo(map).bindTooltip("目前位置");
@@ -1111,15 +1118,18 @@
 
   async function searchFood() {
     if (foodRequestInProgress) return;
-    const spot = getSpot($("#foodSpotSelect").value);
-    if (!spot) return showFoodStatus("先選擇一個泊點", "回到找泊點頁面，也可以從任何泊點卡片直接開始搜尋。 ");
+    const selectedSpotValue = $("#foodSpotSelect").value;
+    const spot = selectedSpotValue === "current"
+      ? userPosition && { id: `current_${stableId(userPosition.lat, userPosition.lon)}`, name: "目前位置", ...userPosition }
+      : getSpot(selectedSpotValue);
+    if (!spot) return showFoodStatus("先定位或選擇泊點", "按「定位附近」搜尋目前位置，或從清單選擇一個泊點。 ");
     const radius = Number($("#foodRadius").value);
     const key = `${spot.id}_${radius}`;
-    lastFoodSearchKey = key;
+    lastFoodSearchKey = `${selectedSpotValue}_${radius}`;
     const googleNearby = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`餐廳 near ${spot.lat},${spot.lon}`)}`;
     const searchSequence = ++foodSearchSequence;
     const isCurrentSearch = () => searchSequence === foodSearchSequence
-      && $("#foodSpotSelect").value === spot.id
+      && $("#foodSpotSelect").value === selectedSpotValue
       && Number($("#foodRadius").value) === radius;
     foodRequestInProgress = true;
     $("#searchFoodButton").disabled = true;
@@ -1232,6 +1242,41 @@
       const selectedRadius = $("#foodRadius").value;
       if (selectedSpot && `${selectedSpot}_${selectedRadius}` !== lastFoodSearchKey) queueMicrotask(searchFood);
     }
+  }
+
+  let foodLocateInProgress = false;
+
+  async function locateAndSearchFood() {
+    if (foodLocateInProgress) return;
+    const button = $("#locateFoodButton");
+    const select = $("#foodSpotSelect");
+    foodLocateInProgress = true;
+    button.disabled = true;
+    button.textContent = "定位中…";
+    select.disabled = true;
+    showFoodStatus("正在定位目前位置", "請允許瀏覽器使用位置資訊。定位完成後會自動搜尋附近美食。");
+    try {
+      await locateUser();
+      select.disabled = false;
+      select.value = "current";
+      await searchFood();
+    } catch (error) {
+      showFoodStatus("無法取得目前位置", error.message);
+      notify(error.message);
+    } finally {
+      select.disabled = false;
+      button.disabled = false;
+      button.textContent = "定位附近";
+      foodLocateInProgress = false;
+    }
+  }
+
+  function handleFoodSpotChange() {
+    if ($("#foodSpotSelect").value === "current" && !userPosition) {
+      locateAndSearchFood();
+      return;
+    }
+    searchFood();
   }
 
   function attractionQuery(lat, lon, radiusM) {
@@ -1916,8 +1961,9 @@
       }
       planTrip();
     });
-    $("#foodSpotSelect").addEventListener("change", searchFood);
+    $("#foodSpotSelect").addEventListener("change", handleFoodSpotChange);
     $("#foodRadius").addEventListener("change", searchFood);
+    $("#locateFoodButton").addEventListener("click", locateAndSearchFood);
     $("#searchFoodButton").addEventListener("click", searchFood);
     $("#attractionSpotSelect").addEventListener("change", () => showAttractionStatus("已選擇搜尋中心", "按下搜尋附近景點開始查詢。"));
     $("#searchAttractionsButton").addEventListener("click", searchNearbyAttractions);
