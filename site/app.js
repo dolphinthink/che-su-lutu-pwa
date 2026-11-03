@@ -923,6 +923,13 @@
     });
   }
 
+  async function locateNearby() {
+    const position = await locateUser();
+    const attractionCenter = $("#attractionSpotSelect");
+    if (attractionCenter?.querySelector('option[value="current"]')) attractionCenter.value = "current";
+    return position;
+  }
+
   function switchTab(name) {
     $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
     $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
@@ -1404,7 +1411,7 @@
     if ($("#attractionSpotSelect").value === "current") {
       if (!userPosition) {
         showAttractionStatus("正在定位目前位置", "請允許瀏覽器使用位置資訊。");
-        try { await locateUser(); } catch (error) {
+        try { await locateNearby(); } catch (error) {
           showAttractionStatus("無法取得目前位置", error.message);
           notify(error.message);
           return;
@@ -1489,7 +1496,7 @@
     button.disabled = true;
     button.textContent = "定位中…";
     try {
-      await locateUser();
+      await locateNearby();
       $("#attractionSpotSelect").value = "current";
       await searchNearbyAttractions();
     } catch (error) {
@@ -1839,7 +1846,7 @@
       visibleCount = PAGE_SIZE;
       renderSpots(true);
     });
-    $("#locateButton").addEventListener("click", () => locateUser().catch(error => notify(error.message)));
+    $("#locateButton").addEventListener("click", () => locateNearby().catch(error => notify(error.message)));
     $("#loadMore").addEventListener("click", () => { visibleCount += PAGE_SIZE; renderSpots(); });
     $("#spotList").addEventListener("click", event => {
       const button = event.target.closest("[data-action]");

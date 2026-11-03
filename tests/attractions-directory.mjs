@@ -23,6 +23,10 @@ assert.ok(data.points.filter(point => distanceKm(center, point) <= 5).length > 0
 assert.match(app, /normalizeDirectoryAttractions\(directory\?\.points, spot, radius\)/);
 assert.match(app, /仍顯示觀光署景點目錄與本機資料/);
 assert.match(app, /目前位置 \(\$\{Number\(spot\.lat\)\.toFixed\(5\)\}/);
+assert.match(app, /async function locateNearby\(\)[\s\S]*?attractionCenter\.value = "current"/);
+assert.match(app, /#locateButton"\)\.addEventListener\("click", \(\) => locateNearby\(\)/);
+assert.match(app, /#locateAttractionsButton"\)\.addEventListener\("click", locateAndSearchAttractions\)/);
+assert.match(html, /id="locateAttractionsButton"[^>]*>定位附近</);
 assert.match(html, /data\.gov\.tw\/dataset\/7777/);
 assert.match(sw, /attraction-directory\.json\?v=20261103-1/);
 
