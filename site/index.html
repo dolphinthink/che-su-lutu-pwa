@@ -11,9 +11,9 @@
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-180.png">
   <link rel="stylesheet" href="./assets/vendor/leaflet.css">
-  <link rel="stylesheet" href="./styles.css?v=20261028-02">
+  <link rel="stylesheet" href="./styles.css?v=20261103-01">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261030-1"></script>
+  <script defer src="./app.js?v=20261103-1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -109,13 +109,14 @@
       </section>
 
       <section class="view" id="view-attractions" aria-labelledby="attractionTitle">
-        <div class="page-heading"><div><p class="eyebrow">NEARBY PLACES</p><h1 id="attractionTitle">泊點附近去哪裡</h1><p class="muted">搜尋泊點周邊的公園、觀景點、古蹟、博物館和自然景點。</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">NEARBY PLACES</p><h1 id="attractionTitle">附近去哪裡</h1><p class="muted">定位目前位置或選擇泊點，搜尋周邊的公園、觀景點、古蹟、博物館和自然景點。</p></div></div>
         <div class="panel food-search-panel">
-          <label class="field"><span>選擇泊點</span><select id="attractionSpotSelect" aria-label="選擇泊點"></select></label>
-          <div class="food-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="attractionRadius" aria-label="景點搜尋半徑"><option value="1000">1 公里</option><option value="2000">2 公里</option><option value="5000" selected>5 公里</option><option value="10000">10 公里</option></select></label><button id="searchAttractionsButton" class="button button-primary" type="button">搜尋附近景點</button></div>
+          <label class="field"><span>搜尋中心位置</span><select id="attractionSpotSelect" aria-label="選擇景點搜尋中心"></select></label>
+          <div class="attraction-actions"><label class="field compact-field"><span>搜尋半徑</span><select id="attractionRadius" aria-label="景點搜尋半徑"><option value="1000">1 公里</option><option value="2000">2 公里</option><option value="5000" selected>5 公里</option><option value="10000">10 公里</option></select></label><button id="locateAttractionsButton" class="button button-light" type="button">定位目前位置</button><button id="searchAttractionsButton" class="button button-primary" type="button">搜尋附近景點</button></div>
+          <div class="attraction-saved-toolbar"><button id="toggleSavedAttractionsButton" class="button button-light" type="button" aria-pressed="false">已儲存景點 (0)</button><span class="data-source-hint">收藏會保存在目前瀏覽器，可稍後查看。</span></div>
           <p class="data-source-hint">只在按下搜尋時查詢 OpenStreetMap；結果依距離排序，可開啟 Google 地圖導航。</p>
         </div>
-        <div id="attractionResults" class="food-results" aria-live="polite"><div class="empty-state"><span class="empty-icon">景</span><strong>選擇泊點開始搜尋</strong><p>搜尋附近景點需要網路連線。</p></div></div>
+        <div id="attractionResults" class="food-results" aria-live="polite"><div class="empty-state"><span class="empty-icon">景</span><strong>選擇泊點或定位目前位置</strong><p>搜尋附近景點需要網路連線。</p></div></div>
         <div class="osm-credit">景點資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
       </section>
 

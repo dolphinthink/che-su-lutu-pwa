@@ -36,11 +36,16 @@
   let toastTimer;
   let foodRequestInProgress = false;
   let attractionRequestInProgress = false;
+  let attractionItemsByKey = new Map();
+  let lastAttractionSearch = null;
+  let showingSavedAttractions = false;
   let selectedSpotUpdateId = null;
   let sourceSpots = [];
   let sourceSpotsReady = false;
   const selectedSourceSpotIds = new Set();
   const favoriteIds = new Set(readJson("che-su-favorites", []));
+  const savedAttractionData = readJson("che-su-saved-attractions", []);
+  const savedAttractions = new Map((Array.isArray(savedAttractionData) ? savedAttractionData : []).filter(item => item && item.name && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon))).map(item => [attractionKey(item), item]));
   const spotCountiesByCoordinates = new WeakMap();
 
   function readJson(key, fallback) {
@@ -589,7 +594,7 @@
     if (previousFood && [...food.options].some(option => option.value === previousFood)) food.value = previousFood;
     const attraction = $("#attractionSpotSelect");
     const previousAttraction = attraction.value;
-    attraction.innerHTML = sorted.map(optionText).join("");
+    attraction.innerHTML = `<option value="current">目前位置（先定位）</option>${sorted.map(optionText).join("")}`;
     if (previousAttraction && [...attraction.options].some(option => option.value === previousAttraction)) attraction.value = previousAttraction;
     const datalist = $("#spotNameOptions");
     datalist.innerHTML = sorted.map(spot => `<option value="${escapeHtml(spot.name)}"></option>`).join("");
@@ -1186,6 +1191,10 @@
     return "景點";
   }
 
+  function attractionKey(item) {
+    return `${stableId(Number(item.lat), Number(item.lon))}|${normalizeSearchText(item.name)}`;
+  }
+
   function normalizeAttractionElements(elements, spot, radius) {
     const results = [];
     for (const element of Array.isArray(elements) ? elements : []) {
@@ -1224,20 +1233,79 @@
   }
 
   function renderAttractions(items, spot, radius, options = {}) {
+    lastAttractionSearch = { items, spot, radius, options };
+    updateSavedAttractionsButton();
+    if (showingSavedAttractions) return renderSavedAttractions();
     const { staleAt = 0, message = "" } = options;
     if (!items.length) {
       showAttractionStatus("附近沒有找到已命名景點", "可擴大搜尋半徑，或使用 Google 地圖查看附近景點。", googleSearchUrl("景點", spot.lat, spot.lon, "near"));
       return;
     }
-    const cards = items.map(item => {
-      const details = [item.category, item.address ? `地址：${item.address}` : "", item.opening ? `開放時間：${item.opening}` : ""].filter(Boolean).join(" · ");
-      const url = googleSearchUrl(item.name, item.lat, item.lon, "景點");
-      const distance = item.distance < 1000 ? `${Math.round(item.distance)} 公尺` : `${(item.distance / 1000).toFixed(1)} 公里`;
-      return `<article class="food-result-card attraction-result-card"><div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(details)}</p><div class="food-radius">距離泊點約 ${distance}</div></div><a class="food-link" href="${url}" target="_blank" rel="noopener">地圖導航 ↗</a></article>`;
-    }).join("");
+    const cards = renderAttractionCards(items, "距離搜尋位置約");
     const staleMessage = staleAt ? `<p class="data-source-hint">顯示上次查詢資料（${new Date(staleAt).toLocaleString("zh-TW")}）。</p>` : "";
     const updateMessage = message ? `<p class="data-source-hint">${escapeHtml(message)}</p>` : "";
     $("#attractionResults").innerHTML = `${updateMessage}${staleMessage}<p class="data-source-hint">${escapeHtml(spot.name)} 周邊 ${Number(radius) / 1000} 公里 · ${items.length} 個景點 · OpenStreetMap</p>${cards}<p class="data-source-hint">景點標註和開放資訊可能不完整，出發前請再確認現場或官方資訊。</p>`;
+  }
+
+  function renderAttractionCards(items, distanceLabel) {
+    attractionItemsByKey = new Map(items.map(item => [attractionKey(item), item]));
+    return items.map(item => {
+      const details = [item.category, item.address ? `地址：${item.address}` : "", item.opening ? `開放時間：${item.opening}` : ""].filter(Boolean).join(" · ");
+      const url = googleSearchUrl(item.name, item.lat, item.lon, "景點");
+      const distance = item.distance < 1000 ? `${Math.round(item.distance)} 公尺` : `${(item.distance / 1000).toFixed(1)} 公里`;
+      const key = attractionKey(item);
+      const saved = savedAttractions.has(key);
+      return `<article class="food-result-card attraction-result-card"><div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(details)}</p><div class="food-radius">${distanceLabel} ${distance}</div></div><div class="attraction-card-actions"><a class="food-link" href="${url}" target="_blank" rel="noopener">地圖導航 ↗</a><button class="food-link attraction-save ${saved ? "saved" : ""}" type="button" data-attraction-save="${escapeHtml(key)}" aria-pressed="${saved}" aria-label="${saved ? "從已儲存景點移除" : "儲存此景點"}">${saved ? "已儲存 ♥" : "儲存 ♡"}</button></div></article>`;
+    }).join("");
+  }
+
+  function updateSavedAttractionsButton() {
+    const button = $("#toggleSavedAttractionsButton");
+    if (!button) return;
+    button.textContent = `${showingSavedAttractions ? "返回搜尋結果" : "已儲存景點"} (${savedAttractions.size})`;
+    button.setAttribute("aria-pressed", String(showingSavedAttractions));
+  }
+
+  function renderSavedAttractions() {
+    const items = [...savedAttractions.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "zh-Hant"));
+    if (!items.length) return showAttractionStatus("尚未儲存景點", "搜尋附近景點後，按下景點卡片上的「儲存」即可留待稍後查看。");
+    const cards = renderAttractionCards(items, "原搜尋位置距離");
+    $("#attractionResults").innerHTML = `<p class="data-source-hint">已儲存 ${items.length} 個景點，資料保存在目前瀏覽器。</p>${cards}`;
+  }
+
+  function toggleSavedAttraction(button) {
+    const key = button.dataset.attractionSave;
+    const item = attractionItemsByKey.get(key);
+    if (!item) return;
+    const wasSaved = savedAttractions.has(key);
+    if (wasSaved) savedAttractions.delete(key);
+    else savedAttractions.set(key, { ...item });
+    try {
+      localStorage.setItem("che-su-saved-attractions", JSON.stringify([...savedAttractions.values()]));
+    } catch {
+      if (wasSaved) savedAttractions.set(key, item);
+      else savedAttractions.delete(key);
+      updateSavedAttractionsButton();
+      return notify("目前瀏覽器無法儲存景點，請檢查儲存空間設定。");
+    }
+    updateSavedAttractionsButton();
+    if (showingSavedAttractions) renderSavedAttractions();
+    else {
+      const saved = !wasSaved;
+      button.classList.toggle("saved", saved);
+      button.textContent = saved ? "已儲存 ♥" : "儲存 ♡";
+      button.setAttribute("aria-pressed", String(saved));
+      button.setAttribute("aria-label", saved ? "從已儲存景點移除" : "儲存此景點");
+    }
+    notify(wasSaved ? "已從儲存景點移除。" : "景點已儲存，可稍後查看。");
+  }
+
+  function toggleSavedAttractionsView() {
+    showingSavedAttractions = !showingSavedAttractions;
+    updateSavedAttractionsButton();
+    if (showingSavedAttractions) return renderSavedAttractions();
+    if (lastAttractionSearch) return renderAttractions(lastAttractionSearch.items, lastAttractionSearch.spot, lastAttractionSearch.radius, lastAttractionSearch.options);
+    showAttractionStatus("選擇泊點或定位目前位置", "搜尋附近景點後會顯示在這裡。");
   }
 
   async function fetchAttractionsFromProxy(spot, radius, signal) {
@@ -1253,8 +1321,21 @@
 
   async function searchNearbyAttractions() {
     if (attractionRequestInProgress) return;
-    const spot = getSpot($("#attractionSpotSelect").value);
-    if (!spot) return showAttractionStatus("先選擇一個泊點", "選好泊點後即可查詢周邊景點。");
+    let spot;
+    if ($("#attractionSpotSelect").value === "current") {
+      if (!userPosition) {
+        showAttractionStatus("正在定位目前位置", "請允許瀏覽器使用位置資訊。");
+        try { await locateUser(); } catch (error) {
+          showAttractionStatus("無法取得目前位置", error.message);
+          notify(error.message);
+          return;
+        }
+      }
+      spot = { id: `current_${stableId(userPosition.lat, userPosition.lon)}`, name: "目前位置", ...userPosition };
+    } else spot = getSpot($("#attractionSpotSelect").value);
+    if (!spot) return showAttractionStatus("先選擇搜尋中心", "選擇一個泊點或定位目前位置後即可查詢周邊景點。");
+    showingSavedAttractions = false;
+    updateSavedAttractionsButton();
     const radius = Number($("#attractionRadius").value);
     const key = `${spot.id}_${radius}`;
     const googleNearby = googleSearchUrl("景點", spot.lat, spot.lon, "near");
@@ -1309,6 +1390,23 @@
       attractionRequestInProgress = false;
       $("#searchAttractionsButton").disabled = false;
       $("#searchAttractionsButton").textContent = "搜尋附近景點";
+    }
+  }
+
+  async function locateAndSearchAttractions() {
+    const button = $("#locateAttractionsButton");
+    button.disabled = true;
+    button.textContent = "定位中…";
+    try {
+      await locateUser();
+      $("#attractionSpotSelect").value = "current";
+      await searchNearbyAttractions();
+    } catch (error) {
+      showAttractionStatus("無法取得目前位置", error.message);
+      notify(error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = "定位目前位置";
     }
   }
 
@@ -1677,8 +1775,14 @@
     });
     $("#foodSpotSelect").addEventListener("change", () => showFoodStatus("已選擇泊點", "按下搜尋附近美食開始查詢。"));
     $("#searchFoodButton").addEventListener("click", searchFood);
-    $("#attractionSpotSelect").addEventListener("change", () => showAttractionStatus("已選擇泊點", "按下搜尋附近景點開始查詢。"));
+    $("#attractionSpotSelect").addEventListener("change", () => showAttractionStatus("已選擇搜尋中心", "按下搜尋附近景點開始查詢。"));
     $("#searchAttractionsButton").addEventListener("click", searchNearbyAttractions);
+    $("#locateAttractionsButton").addEventListener("click", locateAndSearchAttractions);
+    $("#toggleSavedAttractionsButton").addEventListener("click", toggleSavedAttractionsView);
+    $("#attractionResults").addEventListener("click", event => {
+      const button = event.target.closest("[data-attraction-save]");
+      if (button) toggleSavedAttraction(button);
+    });
     $("#searchSourceSpotsButton").addEventListener("click", searchSourceSpots);
     $("#sourceKmlInput").addEventListener("change", event => { if (event.target.files[0]) importSourceKmlFile(event.target.files[0]); });
     $("#sourceSpotSearch").addEventListener("input", renderSourceSpots);
@@ -1751,6 +1855,7 @@
 
   async function init() {
     bindEvents();
+    updateSavedAttractionsButton();
     setNetworkStatus();
     // Register the offline shell before data requests so a slow mobile connection
     // cannot leave an installed app without a Service Worker on first launch.
