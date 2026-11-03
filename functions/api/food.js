@@ -1,5 +1,5 @@
 const CACHE_TTL_SECONDS = 60 * 60;
-const UPSTREAM_TIMEOUT_MS = 10000;
+const UPSTREAM_TIMEOUT_MS = 8000;
 const CACHE_ZONE = "che-su-lutu-food-v1";
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -9,7 +9,8 @@ const CORS_HEADERS = {
 };
 const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter"
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
 ];
 
 function json(body, status = 200, headers = {}) {
@@ -29,7 +30,7 @@ function boundedCoordinate(value, min, max) {
 }
 
 function buildQuery(lat, lon, radiusM) {
-  return `[out:json][timeout:10];(nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](around:${Math.round(radiusM)},${lat.toFixed(6)},${lon.toFixed(6)}););out center qt 100;`;
+  return `[out:json][timeout:8];(nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"](around:${Math.round(radiusM)},${lat.toFixed(6)},${lon.toFixed(6)}););out center qt 100;`;
 }
 
 async function fetchUpstream(query) {
