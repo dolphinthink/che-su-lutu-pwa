@@ -46,6 +46,9 @@
   let showingSavedAttractions = false;
   let tripPlanSequence = 0;
   let tripAdjustmentSequence = 0;
+  let tripAdjustmentConversation = [];
+  let activeTripConversationContext = null;
+  let tripConversationBusy = false;
   let activeTripPlanSequence = 0;
   let activeTripScheduleDays = [];
   let activeTripItinerary = [];
@@ -2172,6 +2175,8 @@
     activeTripAttractionPoints = [];
     activeTripDirectoryError = false;
     activeTripRouteError = false;
+    resetTripAdjustmentConversation();
+    $("#tripAdjustmentPanel").hidden = true;
     parseRequirementsFromText();
     $("#planExportToolbar").hidden = true;
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
@@ -2312,6 +2317,7 @@
     if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: routeError ? "unavailable" : "ready" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: routeError ? "unavailable" : "ready" });
     $("#planExportToolbar").hidden = !itinerary.length && !scheduleDays.length;
+    showTripAdjustmentPanel();
   }
 
   function formatTripClock(minutes) {
@@ -2558,7 +2564,7 @@
     const destinations = day.legs.map(item => item.destination);
     destinations.splice(legIndex, 1);
     rebuildTripScheduleLegs(day, destinations);
-    refreshTripAfterPartialEdit("已移除這個停留點，其餘行程保留並重新計算受影響路段。");
+    return refreshTripAfterPartialEdit("已移除這個停留點，其餘行程保留並重新計算受影響路段。");
   }
 
   function moveTripStop(dayNumber, legIndex, delta) {
@@ -2569,7 +2575,7 @@
     const destinations = day.legs.map(item => item.destination);
     [destinations[legIndex], destinations[targetIndex]] = [destinations[targetIndex], destinations[legIndex]];
     rebuildTripScheduleLegs(day, destinations);
-    refreshTripAfterPartialEdit("已調整停留順序，其餘行程保留並重新計算受影響路段。");
+    return refreshTripAfterPartialEdit("已調整停留順序，其餘行程保留並重新計算受影響路段。");
   }
 
   function replacePlannedOvernightSpot(dayNumber, spotId) {
@@ -2593,7 +2599,316 @@
       }
     }
     syncTripBackups();
-    refreshTripAfterPartialEdit(`第 ${dayNumber} 天泊點已換成「${spot.name}」。`);
+    return refreshTripAfterPartialEdit("第 " + dayNumber + " 天泊點已換成「" + spot.name + "」。");
+  }
+
+  function resetTripAdjustmentConversation() {
+    tripAdjustmentConversation = [];
+    activeTripConversationContext = null;
+    tripConversationBusy = false;
+    const messages = $("#tripAdjustmentMessages");
+    if (messages) messages.replaceChildren();
+    const input = $("#tripAdjustmentInput");
+    if (input) input.value = "";
+    const status = $("#tripAdjustmentStatus");
+    if (status) status.textContent = "可調整出發時間、途中停留時間與順序、停留地點和備援泊點。";
+    const submit = $("#tripAdjustmentSubmit");
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "送出調整";
+    }
+  }
+
+  function appendTripConversationMessage(role, message) {
+    const root = $("#tripAdjustmentMessages");
+    if (!root) return;
+    const bubble = document.createElement("div");
+    bubble.className = "trip-chat-message " + (role === "user" ? "user" : "assistant");
+    bubble.textContent = message;
+    root.append(bubble);
+    root.scrollTop = root.scrollHeight;
+    tripAdjustmentConversation.push({ role, message });
+  }
+
+  function showTripAdjustmentPanel() {
+    const panel = $("#tripAdjustmentPanel");
+    if (!panel || (!activeTripScheduleDays.length && !activeTripItinerary.length)) return;
+    panel.hidden = false;
+    if (!tripAdjustmentConversation.length) {
+      appendTripConversationMessage("assistant", "行程已準備好。你可以直接告訴我想微調哪一天，例如「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」或「把午餐改到花蓮市區」。");
+    }
+  }
+
+  function tripConversationDay(text) {
+    const match = String(text).match(/第?\s*(\d{1,2}|[一二兩三四五六七八九十]{1,3})\s*(?:天|晚|夜)/u);
+    return match ? chineseNumber(match[1]) : null;
+  }
+
+  function parseTripConversationDuration(text) {
+    let value = String(text);
+    if (/一個半小時/u.test(value)) return 90;
+    value = value.replace(/半個小時|半小時|半個鐘頭/u, "30分鐘");
+    const hourMatch = value.match(/(\d+(?:\.\d+)?|[一二兩三四五六七八九十]{1,3})(?:個)?\s*小時(半)?/u);
+    if (hourMatch) {
+      const amount = /^\d/u.test(hourMatch[1]) ? Number(hourMatch[1]) : chineseNumber(hourMatch[1]);
+      return Math.round(amount * 60 + (hourMatch[2] ? 30 : 0));
+    }
+    const minuteMatch = value.match(/(\d+|[一二兩三四五六七八九十]{1,3})\s*(?:分鐘|分)/u);
+    return minuteMatch ? chineseNumber(minuteMatch[1]) : null;
+  }
+
+  function tripConversationStopType(text) {
+    if (/午餐|中餐|用餐|吃飯|午飯/u.test(text)) return "meal";
+    if (/景點|景區|觀光點/u.test(text)) return "attraction";
+    if (/泊點|住宿|過夜/u.test(text)) return "overnight";
+    return null;
+  }
+
+  function tripConversationCandidates(text, type = tripConversationStopType(text)) {
+    const requestedDay = tripConversationDay(text);
+    const days = activeTripScheduleDays.filter(day => !requestedDay || day.day === requestedDay);
+    if (requestedDay && !days.length) throw new Error("目前行程沒有第 " + requestedDay + " 天，請確認天數。");
+    let candidates = days.flatMap(day => (day.legs || []).map((leg, legIndex) => ({ day, leg, legIndex })))
+      .filter(item => ["attraction", "meal", "overnight"].includes(item.leg.destination && item.leg.destination.type));
+    if (type) candidates = candidates.filter(item => item.leg.destination.type === type);
+    const named = candidates.filter(item => {
+      const name = item.leg.destination.name || item.leg.destination.label || "";
+      return name.length > 1 && text.includes(name);
+    });
+    if (named.length === 1) return named;
+    if (named.length > 1) candidates = named;
+    if (!candidates.length) throw new Error(type === "meal"
+      ? "這一天沒有安排途中用餐停留；請改指定景點或泊點，或先重新規劃路線。"
+      : "找不到符合條件的停留點，請說明日期和類型，例如「第二天景點」。");
+    if (candidates.length > 1) {
+      const choices = candidates.map(item => "第 " + item.day.day + " 天「" + (item.leg.destination.name || item.leg.destination.label || item.leg.destination.type) + "」").join("、");
+      throw new Error("我找到多個可能的停留點（" + choices + "），請補上天數或地點名稱。");
+    }
+    return candidates;
+  }
+
+  function tripConversationOvernightItem(text) {
+    const dayNumber = tripConversationDay(text);
+    const items = activeTripItinerary.filter(item => !dayNumber || item.day === dayNumber);
+    if (dayNumber && !items.length) throw new Error("目前行程沒有第 " + dayNumber + " 天的泊點。");
+    if (items.length > 1) throw new Error("請補上天數，例如「第二晚改用第一個備援泊點」。");
+    if (!items.length) throw new Error("目前行程沒有可調整的泊點。");
+    return items[0];
+  }
+
+  function parseTripDepartureMinute(text, currentMinute) {
+    const match = text.match(/(?:上午|早上|下午|晚上)?\s*(\d{1,2})[:：](\d{2})/u);
+    if (match && /出發|起程|時間|改成|調整/u.test(text)) {
+      let hour = Number(match[1]);
+      const minute = Number(match[2]);
+      if (/下午|晚上/u.test(text) && hour < 12) hour += 12;
+      if (/上午|早上/u.test(text) && hour === 12) hour = 0;
+      if (hour > 23 || minute > 59) throw new Error("請輸入有效時間，例如 08:30。");
+      return hour * 60 + minute;
+    }
+    const spoken = text.match(/(上午|早上|中午|下午|晚上)?\s*(\d{1,2}|[一二兩三四五六七八九十]{1,3})\s*點(?:半|(\d{1,2})分?)?/u);
+    if (spoken && /出發|起程|時間|改成|調整/u.test(text)) {
+      let hour = /^\d/u.test(spoken[2]) ? Number(spoken[2]) : chineseNumber(spoken[2]);
+      const minute = spoken[0].includes("半") ? 30 : Number(spoken[3] || 0);
+      if (["下午", "晚上"].includes(spoken[1]) && hour < 12) hour += 12;
+      if (["上午", "早上"].includes(spoken[1]) && hour === 12) hour = 0;
+      if (spoken[1] === "中午" && hour < 11) hour += 12;
+      if (hour > 23 || minute > 59) throw new Error("請輸入有效時間，例如「早上九點半」或 09:30。");
+      return hour * 60 + minute;
+    }
+    const duration = parseTripConversationDuration(text);
+    if (duration == null || !/出發|起程/u.test(text)) return null;
+    if (/晚|延後|延遲|往後/u.test(text)) return currentMinute + duration;
+    if (/早|提早|提前|往前/u.test(text)) return currentMinute - duration;
+    return null;
+  }
+
+  function setTripDayDeparture(day, minute) {
+    day.departureMinute = ((minute % 1440) + 1440) % 1440;
+  }
+
+  async function applyTripConversationalAdjustment(rawText) {
+    const text = String(rawText || "").trim();
+    if (!text) throw new Error("請輸入想調整的內容。");
+    if (!activeTripItinerary.length && !activeTripScheduleDays.length) throw new Error("目前沒有已規劃的行程，請先完成規劃。");
+    const requestedDay = tripConversationDay(text);
+    const daysToAdjust = requestedDay
+      ? activeTripScheduleDays.filter(day => day.day === requestedDay)
+      : /每天|每一天/u.test(text) ? activeTripScheduleDays : [];
+    if (requestedDay && activeTripScheduleDays.length && !daysToAdjust.length) throw new Error("目前行程沒有第 " + requestedDay + " 天。");
+
+    if (/備援|替代泊點/u.test(text)) {
+      const item = tripConversationOvernightItem(text);
+      const numberMatch = text.match(/(?:第\s*)?(一|二|三|1|2|3)\s*個/u);
+      const backupIndex = numberMatch ? chineseNumber(numberMatch[1]) - 1 : 0;
+      const backup = item.backups && item.backups[backupIndex];
+      if (!backup) throw new Error("第 " + item.day + " 天沒有第 " + (backupIndex + 1) + " 個備援泊點可選。");
+      await replacePlannedOvernightSpot(item.day, backup.spot.id);
+      activeTripConversationContext = null;
+      return "已把第 " + item.day + " 天的泊點改為「" + backup.spot.name + "」，並更新後續路線。";
+    }
+
+    if (/出發|起程/u.test(text)) {
+      if (!activeTripScheduleDays.length) throw new Error("這份規劃沒有每日路線時間表，無法調整出發時間。");
+      const targets = /每天|每一天/u.test(text) ? activeTripScheduleDays : daysToAdjust;
+      if (!targets.length) throw new Error("請說明哪一天出發，例如「第一天晚半小時出發」。");
+      const newMinute = parseTripDepartureMinute(text, targets[0].departureMinute);
+      if (newMinute == null) throw new Error("請說明要提早／延後多久，或直接給時間，例如「第二天改成 09:00 出發」。");
+      const duration = parseTripConversationDuration(text);
+      for (const day of targets) {
+        const minute = /每天|每一天/u.test(text) && duration != null
+          ? (/晚|延後|延遲|往後/u.test(text) ? day.departureMinute + duration : /早|提早|提前|往前/u.test(text) ? day.departureMinute - duration : newMinute)
+          : newMinute;
+        setTripDayDeparture(day, minute);
+      }
+      await refreshTripAfterPartialEdit("已更新出發時間。");
+      activeTripConversationContext = null;
+      return "出發時間已調整為 " + targets.map(day => "第 " + day.day + " 天 " + formatTripClock(day.departureMinute)).join("、") + "。";
+    }
+
+    if (/刪除|移除|取消(?:這個|該)?停留/u.test(text)) {
+      const item = tripConversationCandidates(text)[0];
+      if (!["attraction", "meal"].includes(item.leg.destination.type)) throw new Error("泊點是每晚住宿終點，不能當作途中停留點移除；可改選備援泊點。");
+      const label = item.leg.destination.name || item.leg.destination.meal || "停留點";
+      await removeTripStop(item.day.day, item.legIndex);
+      activeTripConversationContext = null;
+      return "已移除第 " + item.day.day + " 天的「" + label + "」，並更新受影響路段。";
+    }
+
+    if (/提前|延後|往前|往後|(?:移到|改到|排在).*(?:景點|午餐|中餐|用餐)(?:前|後)/u.test(text)) {
+      const type = tripConversationStopType(text);
+      if (!type || type === "overnight") throw new Error("請說明要移動的景點或用餐點，例如「第二天把午餐移到景點前」。");
+      const item = tripConversationCandidates(text, type)[0];
+      const targets = item.day.legs.map((leg, index) => ({ leg, index })).filter(other => other.index !== item.legIndex && ["attraction", "meal"].includes(other.leg.destination.type));
+      if (!targets.length) throw new Error("這一天沒有另一個途中停留點可調整順序。");
+      const relative = text.match(/(?:景點|午餐|中餐|用餐).*?(前|後)/u);
+      let targetIndex;
+      if (/移到|改到|排在/u.test(text) && relative) {
+        const targetType = /景點/u.test(text) ? "attraction" : /午餐|中餐|用餐/u.test(text) ? "meal" : null;
+        const target = targets.find(other => !targetType || other.leg.destination.type === targetType);
+        if (!target) throw new Error("找不到你指定的相對停留點，請改說「午餐提前」或「景點延後」。");
+        targetIndex = target.index + (relative[1] === "後" ? 1 : 0);
+      } else {
+        const delta = /延後|往後/u.test(text) ? 1 : -1;
+        const target = targets.find(other => other.index === item.legIndex + delta);
+        if (!target) throw new Error("這個停留點已在可移動的最前／最後位置。");
+        targetIndex = target.index;
+      }
+      const destinations = item.day.legs.map(leg => leg.destination);
+      const moving = destinations.splice(item.legIndex, 1)[0];
+      const insertionIndex = targetIndex > item.legIndex ? targetIndex - 1 : targetIndex;
+      destinations.splice(Math.max(0, Math.min(destinations.length, insertionIndex)), 0, moving);
+      rebuildTripScheduleLegs(item.day, destinations);
+      await refreshTripAfterPartialEdit("已調整停留順序。");
+      activeTripConversationContext = null;
+      return "已調整第 " + item.day.day + " 天的停留順序，受影響路段里程與時間已更新。";
+    }
+
+    const duration = parseTripConversationDuration(text);
+    const continuingDwell = /^(?:再|另外|多|少|增加|減少|延長|縮短|改成|改為|調成|設定為|停留)/u.test(text) && activeTripConversationContext && activeTripConversationContext.intent === "dwell";
+    if (duration != null && (/停留|多留|多停|少留|少停|待久|景點/u.test(text) || continuingDwell)) {
+      let day;
+      let leg;
+      let legIndex;
+      if (continuingDwell) {
+        day = activeTripScheduleDays.find(candidate => candidate.day === activeTripConversationContext.day);
+        legIndex = activeTripConversationContext.legIndex;
+        leg = day && day.legs[legIndex];
+        if (!leg || !["attraction", "meal"].includes(leg.destination.type)) throw new Error("剛才調整的停留點已不存在，請重新指定日期和地點。");
+      } else {
+        const found = tripConversationCandidates(text)[0];
+        day = found.day;
+        leg = found.leg;
+        legIndex = found.legIndex;
+      }
+      if (!["attraction", "meal"].includes(leg.destination.type)) throw new Error("泊點停留時間固定為過夜，無法用這個方式修改。");
+      const relative = /多留|多停|少留|少停|待久|延長|縮短|增加|減少/u.test(text);
+      const delta = /少|減少|縮短/u.test(text) ? -duration : duration;
+      const absolute = /(?:改成|改為|調整為|設定為|停留)\s*(?:約\s*)?(?:\d+|[一二兩三四五六七八九十]{1,3}|半小時)/u.test(text);
+      const dwell = Math.max(0, Math.min(720, relative && !absolute ? (Number(leg.destination.dwellMinutes) || 0) + delta : duration));
+      const destinations = day.legs.map(routeLeg => routeLeg.destination);
+      destinations[legIndex] = { ...leg.destination, dwellMinutes: dwell };
+      rebuildTripScheduleLegs(day, destinations);
+      await refreshTripAfterPartialEdit("已更新停留時間。");
+      activeTripConversationContext = { intent: "dwell", day: day.day, legIndex };
+      return "第 " + day.day + " 天「" + (leg.destination.name || leg.destination.meal || "停留點") + "」現在安排停留 " + dwell + " 分鐘。你可以接著說「再多留半小時」。";
+    }
+
+    const relocateMatch = text.match(/(?:午餐|中餐|用餐|吃飯|午飯|景點|停留點)\s*(?:改到|移到|改去|安排到|安排在|改成)\s*(.+)$/u);
+    if (relocateMatch) {
+      if (!activeTripScheduleDays.length) throw new Error("目前行程沒有途中路線表，無法重新安排沿途地點。");
+      const isMeal = /午餐|中餐|用餐|吃飯|午飯/u.test(text);
+      const type = isMeal ? "meal" : "attraction";
+      const placeQuery = relocateMatch[1].replace(/(?:附近|一帶|周邊|作為.*)$/u, "").replace(/[，。！？、\s]+$/u, "").trim();
+      if (!placeQuery) throw new Error("請在「改到」後面補上地名，例如「午餐改到花蓮市區」。");
+      const place = await resolveTripStartLocation(placeQuery);
+      let targetDays = requestedDay ? activeTripScheduleDays.filter(day => day.day === requestedDay) : activeTripScheduleDays;
+      if (!requestedDay) {
+        const ranked = targetDays.map(day => ({ day, distance: day.routeShape && day.routeShape.segments && day.routeShape.segments.length
+          ? measurePointOnTripRoute(place, day.routeShape).distanceKm
+          : Math.min(haversineKm(place, day.origin), haversineKm(place, day.end)) })).sort((a, b) => a.distance - b.distance);
+        if (!ranked.length || ranked[0].distance > 30 || ranked.length > 1 && ranked[1].distance - ranked[0].distance < 3) {
+          throw new Error("請補上天數，例如「第二天午餐改到花蓮市區」，這樣我才能保留其他天的安排。");
+        }
+        targetDays = [ranked[0].day];
+      }
+      const day = targetDays[0];
+      const found = day.legs.map((leg, index) => ({ leg, index })).find(item => item.leg.destination.type === type);
+      if (!found) throw new Error("第 " + day.day + " 天目前沒有安排" + (isMeal ? "午餐" : "景點") + "，無法移動這個停留點。");
+      const previous = found.leg.destination;
+      let updated;
+      if (isMeal) {
+        const nearby = closestDirectoryPoints(activeTripFoodPoints, place, 5, 50);
+        const options = recommendFoodsByMeal(nearby, place).lunch.foods;
+        const choice = options[0] || null;
+        const point = choice || place;
+        updated = { ...previous, ...(choice || {}), lat: Number(point.lat), lon: Number(point.lon), name: choice && choice.name || "午餐（" + place.label + "）", label: choice && choice.name || place.label, meal: "午餐", options, routePosition: day.routeShape ? measurePointOnTripRoute(point, day.routeShape) : previous.routePosition, dwellMinutes: previous.dwellMinutes };
+        day.lunchOptions = options;
+      } else {
+        const nearest = closestDirectoryPoints(activeTripAttractionPoints, place, 5, 1)[0];
+        const point = nearest || place;
+        updated = { ...previous, ...(nearest || {}), lat: Number(point.lat), lon: Number(point.lon), name: nearest && nearest.name || place.label, label: nearest && nearest.name || place.label, routePosition: day.routeShape ? measurePointOnTripRoute(point, day.routeShape) : previous.routePosition, dwellMinutes: previous.dwellMinutes };
+      }
+      const destinations = day.legs.map(leg => leg.destination);
+      destinations[found.index] = updated;
+      const finalStop = destinations.find(destination => ["overnight", "return", "destination"].includes(destination.type));
+      const routeStops = destinations.filter(destination => destination !== finalStop)
+        .sort((a, b) => (a.routePosition && a.routePosition.progressKm || 0) - (b.routePosition && b.routePosition.progressKm || 0));
+      rebuildTripScheduleLegs(day, finalStop ? routeStops.concat(finalStop) : routeStops);
+      await refreshTripAfterPartialEdit("已移動途中停留點。");
+      activeTripConversationContext = null;
+      return isMeal
+        ? "第 " + day.day + " 天午餐已移到「" + place.label + "」" + (updated.name !== place.label ? "，並選用附近的「" + updated.name + "」。" : "；附近沒有目錄店家，先保留地區位置。")
+        : "第 " + day.day + " 天景點已改為「" + updated.name + "」（" + place.lat.toFixed(4) + ", " + place.lon.toFixed(4) + "）。";
+    }
+
+    throw new Error("我還不能判斷要改哪一項。你可以說「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」、「刪除第一天景點」、「午餐提前」或「第一晚改用第一個備援泊點」。");
+  }
+
+  async function submitTripAdjustment(event) {
+    event.preventDefault();
+    if (tripConversationBusy) return;
+    const input = $("#tripAdjustmentInput");
+    const text = input.value.trim();
+    if (!text) return;
+    appendTripConversationMessage("user", text);
+    input.value = "";
+    tripConversationBusy = true;
+    $("#tripAdjustmentSubmit").disabled = true;
+    $("#tripAdjustmentSubmit").textContent = "正在調整…";
+    $("#tripAdjustmentStatus").textContent = "正在依照你的描述更新行程…";
+    try {
+      appendTripConversationMessage("assistant", await applyTripConversationalAdjustment(text));
+      $("#tripAdjustmentStatus").textContent = "可以接著輸入下一項微調；每次變更都會更新受影響的行車時間與里程。";
+    } catch (error) {
+      appendTripConversationMessage("assistant", error.message || "這次沒有套用調整，請換個方式描述。");
+      $("#tripAdjustmentStatus").textContent = "請補上天數、停留點類型或更明確的地名，再送出一次。";
+    } finally {
+      tripConversationBusy = false;
+      $("#tripAdjustmentSubmit").disabled = false;
+      $("#tripAdjustmentSubmit").textContent = "送出調整";
+      input.focus();
+    }
   }
 
   async function exportTripPlanPng() {
@@ -2932,6 +3247,7 @@
 
   function bindEvents() {
     $$(".nav-item").forEach(button => button.addEventListener("click", () => switchTab(button.dataset.tab)));
+    $("#tripAdjustmentForm").addEventListener("submit", submitTripAdjustment);
     $("#searchInput").addEventListener("input", () => { visibleCount = PAGE_SIZE; renderSpots(true); });
     $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; visibleCount = PAGE_SIZE; renderSpots(true); $("#searchInput").focus(); });
     $("#resetSpotFilters").addEventListener("click", () => {

@@ -11,10 +11,10 @@
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-180.png">
   <link rel="stylesheet" href="./assets/vendor/leaflet.css">
-  <link rel="stylesheet" href="./styles.css?v=20261119-10">
+  <link rel="stylesheet" href="./styles.css?v=20261119-11">
   <script defer src="./assets/vendor/leaflet.js"></script>
   <script defer src="./assets/vendor/html2canvas.min.js"></script>
-  <script defer src="./app.js?v=20261119-10"></script>
+  <script defer src="./app.js?v=20261119-11"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -99,6 +99,16 @@
           <div><strong>行程已規劃完成</strong><small>可分享或下載成 PNG 圖片。</small></div>
           <button class="button button-light" id="exportTripPngButton" type="button">分享／匯出 PNG</button>
         </div>
+        <section class="trip-conversation-panel" id="tripAdjustmentPanel" aria-labelledby="tripAdjustmentTitle" hidden>
+          <div class="trip-conversation-heading"><div><h2 id="tripAdjustmentTitle">用對話微調行程</h2><p>像聊天一樣說明要怎麼調整；可連續輸入多項，變更會套用在目前行程。</p></div></div>
+          <div class="trip-conversation-messages" id="tripAdjustmentMessages" role="log" aria-live="polite" aria-relevant="additions"></div>
+          <form id="tripAdjustmentForm" class="trip-conversation-form">
+            <label class="visually-hidden" for="tripAdjustmentInput">輸入行程調整內容</label>
+            <textarea id="tripAdjustmentInput" rows="2" maxlength="400" placeholder="例如：第一天晚半小時出發；景點再多留半小時；第二天午餐改到花蓮市區" required></textarea>
+            <button class="button button-primary" type="submit" id="tripAdjustmentSubmit">送出調整</button>
+          </form>
+          <p class="trip-conversation-status" id="tripAdjustmentStatus">可調整出發時間、途中停留時間與順序、停留地點和備援泊點。</p>
+        </section>
         <div id="routeSchedule" class="route-schedule" aria-live="polite"></div>
         <div id="itinerary" class="itinerary" aria-live="polite"><div class="empty-state"><span class="empty-icon">✳</span><strong>你的行程會顯示在這裡</strong><p>先填寫天數和偏好，再按「規劃我的行程」。</p></div></div>
       </section>
