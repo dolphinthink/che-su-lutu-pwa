@@ -44,6 +44,10 @@
   let attractionItemsByKey = new Map();
   let lastAttractionSearch = null;
   let showingSavedAttractions = false;
+  let tripPlanSequence = 0;
+  let lastTripRouteRequestAt = 0;
+  const tripRoadMetricCache = new Map();
+  const tripMealAvailabilityCache = new Map();
   let selectedSpotUpdateId = null;
   let sourceSpots = [];
   let sourceSpotsReady = false;
@@ -143,6 +147,22 @@
 
   function mapsDirectionsUrl(origin, destination) {
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=driving`;
+  }
+
+  function formatDistanceKm(km) {
+    return km < 1 ? `${Math.round(km * 1000)} 公尺` : `${km.toFixed(1)} 公里`;
+  }
+
+  function formatDriveDistance(meters) {
+    const km = meters / 1000;
+    return km < 1 ? `${Math.round(meters)} 公尺` : `${km.toFixed(1)} 公里`;
+  }
+
+  function formatDriveDuration(seconds) {
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return hours ? `${hours} 小時${remainder ? ` ${remainder} 分` : ""}` : `${minutes} 分`;
   }
 
   function notify(message) {
@@ -1640,7 +1660,159 @@
     return preferences.filter(key => preferenceRules[key]?.test(name));
   }
 
-  function planTrip() {
+  function closestDirectoryPoints(points, center, maxKm, limit) {
+    return (Array.isArray(points) ? points : []).flatMap(point => {
+      const lat = Number(point.lat);
+      const lon = Number(point.lon);
+      if (!point.name || !Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+      const distanceKm = haversineKm(center, { lat, lon });
+      if (distanceKm > maxKm) return [];
+      return [{ ...point, lat, lon, distanceKm }];
+    }).sort((a, b) => a.distanceKm - b.distanceKm).slice(0, limit);
+  }
+
+  function mealAvailability(opening, meal) {
+    const intervals = [];
+    const pattern = /(上午|下午|早上|中午|晚上|AM|PM)?\s*(\d{1,2})[:：](\d{2})\s*(AM|PM)?/gi;
+    const times = [...String(opening || "").matchAll(pattern)].map(match => {
+      let hour = Number(match[2]);
+      const minute = Number(match[3]);
+      const period = String(match[1] || match[4] || "").toLowerCase();
+      if (hour > 24 || minute > 59) return null;
+      if (["下午", "晚上", "pm"].includes(period) && hour < 12) hour += 12;
+      if (["上午", "早上", "am"].includes(period) && hour === 12) hour = 0;
+      if (period === "中午" && hour < 11) hour += 12;
+      return hour * 60 + minute;
+    }).filter(Number.isFinite);
+    for (let index = 0; index + 1 < times.length; index += 2) {
+      let end = times[index + 1];
+      if (end <= times[index]) end += 24 * 60;
+      intervals.push([times[index], end]);
+    }
+    if (!intervals.length) return "unknown";
+    return intervals.some(([start, end]) => start < meal.end && end > meal.start) ? "open" : "closed";
+  }
+
+  function recommendFoodsByMeal(points, center) {
+    const meals = [
+      { key: "breakfast", label: "早餐", start: 6 * 60, end: 11 * 60 },
+      { key: "lunch", label: "午餐", start: 11 * 60, end: 16 * 60 },
+      { key: "dinner", label: "晚餐", start: 16 * 60, end: 23 * 60 }
+    ];
+    const candidates = closestDirectoryPoints(points, center, 30, Infinity);
+    const used = new Set();
+    return Object.fromEntries(meals.map(meal => {
+      const ranked = candidates.map(food => {
+        const cacheKey = `${food.id || stableId(food.lat, food.lon)}:${meal.key}`;
+        if (!tripMealAvailabilityCache.has(cacheKey)) tripMealAvailabilityCache.set(cacheKey, mealAvailability(food.opening, meal));
+        return { ...food, mealAvailability: tripMealAvailabilityCache.get(cacheKey) };
+      }).filter(food => food.mealAvailability !== "closed" && !used.has(String(food.id || stableId(food.lat, food.lon))))
+        .sort((a, b) => {
+          if (a.mealAvailability !== b.mealAvailability) return a.mealAvailability === "open" ? -1 : 1;
+          return a.distanceKm - b.distanceKm;
+        })
+        .slice(0, 3);
+      for (const food of ranked) used.add(String(food.id || stableId(food.lat, food.lon)));
+      return [meal.key, { label: meal.label, foods: ranked }];
+    }));
+  }
+
+  function closestBackupSpots(center, excludedIds) {
+    return spots.filter(spot => spot.overnightEligible !== false && !excludedIds.has(spot.id))
+      .map(spot => ({ spot, distanceKm: haversineKm(center, spot) }))
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, 3);
+  }
+
+  function tripRoadMetricKey(origin, destination) {
+    return `${stableId(origin.lat, origin.lon)}>${stableId(destination.lat, destination.lon)}`;
+  }
+
+  async function loadTripRoadMetrics(items) {
+    const targets = items.flatMap(item => [
+      { origin: item.origin, destination: item.spot, target: item, property: "roadMetrics" },
+      ...Object.values(item.foods || {}).flatMap(group => group.foods || []).map(food => ({ origin: item.spot, destination: food, target: food, property: "roadMetrics" }))
+    ]);
+    const pending = new Map();
+    for (const entry of targets) {
+      entry.key = tripRoadMetricKey(entry.origin, entry.destination);
+      if (tripRoadMetricCache.has(entry.key)) entry.target[entry.property] = tripRoadMetricCache.get(entry.key);
+      else pending.set(entry.key, entry);
+    }
+    if (!pending.size) return true;
+
+    const batches = [];
+    let batchEntries = [];
+    let batchCoordinateIds = new Set();
+    for (const entry of pending.values()) {
+      const pointIds = [stableId(entry.origin.lat, entry.origin.lon), stableId(entry.destination.lat, entry.destination.lon)];
+      const newIds = pointIds.filter(id => !batchCoordinateIds.has(id));
+      if (batchEntries.length && batchCoordinateIds.size + new Set(newIds).size > 90) {
+        batches.push(batchEntries);
+        batchEntries = [];
+        batchCoordinateIds = new Set();
+      }
+      batchEntries.push(entry);
+      for (const pointId of pointIds) batchCoordinateIds.add(pointId);
+    }
+    if (batchEntries.length) batches.push(batchEntries);
+
+    for (const entries of batches) {
+      const coordinates = [];
+      const coordinateIndices = new Map();
+      const coordinateIndex = point => {
+        const key = stableId(point.lat, point.lon);
+        if (!coordinateIndices.has(key)) {
+          coordinateIndices.set(key, coordinates.length);
+          coordinates.push({ lat: Number(point.lat), lon: Number(point.lon) });
+        }
+        return coordinateIndices.get(key);
+      };
+      const indexedPairs = entries.map(entry => ({
+        entry,
+        source: coordinateIndex(entry.origin),
+        destination: coordinateIndex(entry.destination)
+      }));
+      const sources = [...new Set(indexedPairs.map(pair => pair.source))];
+      const destinations = [...new Set(indexedPairs.map(pair => pair.destination))];
+      const sourceRows = new Map(sources.map((index, row) => [index, row]));
+      const destinationColumns = new Map(destinations.map((index, column) => [index, column]));
+      const coordinatePath = coordinates.map(point => `${point.lon.toFixed(6)},${point.lat.toFixed(6)}`).join(";");
+      const url = new URL(`https://router.project-osrm.org/table/v1/driving/${coordinatePath}`);
+      url.searchParams.set("sources", sources.join(";"));
+      url.searchParams.set("destinations", destinations.join(";"));
+      url.searchParams.set("annotations", "distance,duration");
+
+      const waitMs = Math.max(0, 1100 - (Date.now() - lastTripRouteRequestAt));
+      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+      lastTripRouteRequestAt = Date.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const response = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`道路距離服務回應 HTTP ${response.status}`);
+        const data = await response.json();
+        if (data.code !== "Ok") throw new Error(`道路距離服務回應 ${data.code || "未知狀態"}`);
+        for (const pair of indexedPairs) {
+          const row = sourceRows.get(pair.source);
+          const column = destinationColumns.get(pair.destination);
+          const distanceM = data.distances?.[row]?.[column];
+          const durationS = data.durations?.[row]?.[column];
+          const metric = Number.isFinite(distanceM) && Number.isFinite(durationS) ? { distanceM, durationS } : null;
+          tripRoadMetricCache.set(pair.entry.key, metric);
+        }
+        for (const entry of targets) {
+          if (tripRoadMetricCache.has(entry.key)) entry.target[entry.property] = tripRoadMetricCache.get(entry.key);
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return true;
+  }
+
+  async function planTrip() {
+    const planSequence = ++tripPlanSequence;
     parseRequirementsFromText();
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
     const maxKm = Number($("#maxKm").value) || 160;
@@ -1684,10 +1856,43 @@
       routeOrigin = { ...current };
       routeOriginName = choice.spot.name;
     }
-    renderItinerary(itinerary, { days, maxKm, preferences, startLabel, exceeded, needs: $("#needsInput").value.trim() });
+    const details = { days, maxKm, preferences, startLabel, exceeded, needs: $("#needsInput").value.trim() };
+    if (!itinerary.length) {
+      renderItinerary(itinerary, details);
+      return;
+    }
+
+    const excludedBackupIds = new Set(itinerary.map(item => item.spot.id));
+    if (startingSpot) excludedBackupIds.add(startingSpot.id);
+    for (const item of itinerary) {
+      item.backups = closestBackupSpots(item.spot, excludedBackupIds);
+      item.foods = null;
+      item.attractions = null;
+    }
+    renderItinerary(itinerary, details, { loadingData: true, routeStatus: "loading" });
+
+    const [foodResult, attractionResult] = await Promise.allSettled([loadFoodDirectory(), loadAttractionDirectory()]);
+    if (planSequence !== tripPlanSequence) return;
+    const foodPoints = foodResult.status === "fulfilled" ? foodResult.value.points : [];
+    const attractionPoints = attractionResult.status === "fulfilled" ? attractionResult.value.points : [];
+    for (const item of itinerary) {
+      item.foods = recommendFoodsByMeal(foodPoints, item.spot);
+      item.attractions = closestDirectoryPoints(attractionPoints, item.spot, 25, 5);
+    }
+    const directoryError = foodResult.status !== "fulfilled" || attractionResult.status !== "fulfilled";
+    renderItinerary(itinerary, details, { directoryError, routeStatus: "loading" });
+
+    let routeError = false;
+    try {
+      await loadTripRoadMetrics(itinerary);
+    } catch {
+      routeError = true;
+    }
+    if (planSequence !== tripPlanSequence) return;
+    renderItinerary(itinerary, details, { directoryError, routeStatus: routeError ? "unavailable" : "ready" });
   }
 
-  function renderItinerary(items, details) {
+  function renderItinerary(items, details, options = {}) {
     const root = $("#itinerary");
     if (!items.length) {
       root.innerHTML = `<div class="empty-state"><strong>目前沒有可安排的泊點</strong><p>調整起點或需求後再試一次。</p></div>`;
@@ -1695,14 +1900,50 @@
     }
     const prefLabels = { sea: "海邊／海線", mountain: "山區／森林", spring: "溫泉", temple: "廟宇", service: "服務區／休息站" };
     const prefText = details.preferences.map(key => prefLabels[key]).join("、");
+    const routeLabel = metric => metric
+      ? `開車 ${formatDriveDistance(metric.distanceM)} · 約 ${formatDriveDuration(metric.durationS)}`
+      : options.routeStatus === "loading" ? "正在計算路線…"
+        : options.routeStatus === "unavailable" ? "道路服務暫不可用"
+          : "沒有可用道路路線";
     const dayCards = items.map(item => {
       const hits = item.hits.length ? item.hits.map(key => `<span class="badge">符合${prefLabels[key]}</span>`).join("") : "";
       const warning = item.exceeded ? `<p class="plan-warning">此點超過設定的 ${details.maxKm} 公里直線上限，是當下可選的最近點。</p>` : "";
-      return `<article class="day-card"><div class="day-number">DAY<b>${item.day}</b></div><div class="day-main"><div class="day-heading"><div><h3>${escapeHtml(item.spot.name)}</h3><p>由 ${escapeHtml(item.originName)} 出發 · ${Number(item.spot.lat).toFixed(5)}, ${Number(item.spot.lon).toFixed(5)}</p></div><span class="day-distance">直線 ${item.distance.toFixed(1)} km</span></div><div class="spot-badges">${hits}</div>${warning}<div class="day-actions"><a href="${mapsDirectionsUrl(item.origin, item.spot)}" target="_blank" rel="noopener">Google 導航 ↗</a><button type="button" data-action="food" data-id="${escapeHtml(item.spot.id)}">附近美食</button><button type="button" data-action="attractions" data-id="${escapeHtml(item.spot.id)}">附近景點</button><button type="button" data-action="details" data-id="${escapeHtml(item.spot.id)}">泊點資訊</button></div></div></article>`;
+      const backupRows = (item.backups || []).map((backup, index) => `<li><span class="backup-rank">${index + 1}</span><div><strong>${escapeHtml(backup.spot.name)}</strong><small>距規劃泊點 ${formatDistanceKm(backup.distanceKm)}（直線）</small></div><a href="${escapeHtml(mapsDirectionsUrl(item.origin, backup.spot))}" target="_blank" rel="noopener">導航 ↗</a></li>`).join("") || `<li>沒有其他可用的備援泊點。</li>`;
+      const foodRows = item.foods === null && options.loadingData
+        ? `<tr><td colspan="5">正在載入美食目錄…</td></tr>`
+        : [
+          { key: "breakfast", label: "早餐" },
+          { key: "lunch", label: "午餐" },
+          { key: "dinner", label: "晚餐" }
+        ].map(meal => {
+          const foods = item.foods?.[meal.key]?.foods || [];
+          const recommendations = foods.map(food => {
+            const address = [food.city, food.town, food.address].filter(Boolean).join(" ");
+            const availability = food.mealAvailability === "open" ? "目錄時段涵蓋此餐期，請再確認" : "未提供可判讀的營業時段";
+            const opening = String(food.opening || "").trim();
+            const details = [address, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
+            return `<tr><th>${escapeHtml(food.name)}<small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
+          }).join("");
+          const fallbackUrl = escapeHtml(googleSearchUrl(`${meal.label} 餐廳`, item.spot.lat, item.spot.lon, "near"));
+          const missingRows = Array.from({ length: Math.max(0, 3 - foods.length) }, (_, index) => `<tr class="meal-missing-row"><th>${meal.label}推薦 ${foods.length + index + 1}</th><td colspan="3">30 公里內沒有更多符合或時段未確認的目錄店家</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`).join("");
+          return `<tr class="meal-section-row"><th colspan="5">${meal.label}推薦 ${foods.length}/3</th></tr>${recommendations}${missingRows}`;
+        }).join("");
+      const attractionRows = item.attractions === null && options.loadingData
+        ? `<li>正在載入景點目錄…</li>`
+        : (item.attractions || []).map(attraction => `<li><a href="${escapeHtml(googleSearchUrl(attraction.name, attraction.lat, attraction.lon, "near"))}" target="_blank" rel="noopener">${escapeHtml(attraction.name)} ↗</a><small>${escapeHtml(attraction.category || "觀光署登錄景點")} · 距泊點 ${formatDistanceKm(attraction.distanceKm)}（直線）</small></li>`).join("") || `<li>25 公里內沒有找到觀光署登錄景點。<a href="${escapeHtml(googleSearchUrl("景點", item.spot.lat, item.spot.lon, "near"))}" target="_blank" rel="noopener">用 Google 地圖搜尋 ↗</a></li>`;
+      const mainRouteLink = escapeHtml(mapsDirectionsUrl(item.origin, item.spot));
+      const foodTable = `<div class="day-route-table-wrap"><table class="day-route-table" aria-label="第 ${item.day} 天行程里程與三餐推薦美食"><thead><tr><th>路段／美食</th><th>直線距離</th><th>道路里程</th><th>行車時間</th><th>導航</th></tr></thead><tbody><tr class="main-route-row"><th>第 ${item.day} 天：${escapeHtml(item.originName)} → ${escapeHtml(item.spot.name)}</th><td>${formatDistanceKm(item.distance)}</td><td>${item.roadMetrics ? formatDriveDistance(item.roadMetrics.distanceM) : routeLabel(null)}</td><td>${item.roadMetrics ? formatDriveDuration(item.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${mainRouteLink}" target="_blank" rel="noopener">導航 ↗</a></td></tr>${foodRows}</tbody></table></div>`;
+      return `<article class="day-card"><div class="day-number">DAY<b>${item.day}</b></div><div class="day-main"><div class="day-heading"><div><h3>${escapeHtml(item.spot.name)}</h3><p>由 ${escapeHtml(item.originName)} 出發 · ${Number(item.spot.lat).toFixed(5)}, ${Number(item.spot.lon).toFixed(5)}</p></div><span class="day-distance">${routeLabel(item.roadMetrics)}<small>直線 ${item.distance.toFixed(1)} 公里</small></span></div><div class="spot-badges">${hits}</div>${warning}<div class="day-actions"><a href="${mainRouteLink}" target="_blank" rel="noopener">Google 導航 ↗</a><button type="button" data-action="food" data-id="${escapeHtml(item.spot.id)}">附近美食</button><button type="button" data-action="attractions" data-id="${escapeHtml(item.spot.id)}">附近景點</button><button type="button" data-action="details" data-id="${escapeHtml(item.spot.id)}">泊點資訊</button></div><section class="day-plan-section"><h4>備援泊點（最近三個）</h4><ol class="backup-list">${backupRows}</ol></section><section class="day-plan-section"><h4>行程里程與三餐推薦</h4>${foodTable}</section><section class="day-plan-section"><h4>附近景點</h4><ul class="nearby-attraction-list">${attractionRows}</ul></section></div></article>`;
     }).join("");
     const omitted = items.length < details.days ? `<p class="plan-warning">找到 ${items.length} 個不重複泊點，少於需求的 ${details.days} 天；可放寬距離，或改選其他起點。</p>` : "";
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
-    root.innerHTML = `<div class="trip-summary"><strong>${details.days} 天車宿建議</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${dayCards}<p class="form-disclaimer">本建議按直線距離和泊點名稱排序；實際道路路線、開放狀態、合法性、收費與設施請逐站確認。</p>`;
+    const loadingDirectory = options.loadingData ? `<p class="plan-progress">正在載入推薦美食與附近景點…</p>` : "";
+    const directoryNotice = options.directoryError ? `<p class="plan-warning">部分官方美食或景點目錄暫時無法載入，其他行程資訊仍可查看。</p>` : "";
+    const routeNotice = options.routeStatus === "loading" && !options.loadingData
+      ? `<p class="plan-progress">正在計算行車里程與時間…</p>`
+      : options.routeStatus === "unavailable" ? `<p class="plan-warning">道路距離服務暫不可用；可開啟導航查看即時路線與時間。行車資料由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路網估算，不含即時路況。</p>`
+        : options.routeStatus === "ready" ? `<p class="form-disclaimer">行車里程與時間由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路資料估算，不含即時路況；泊點與景點直線距離為座標計算。出發前請用導航確認路況、開放狀態及車泊規定。</p>` : "";
+    root.innerHTML = `<div class="trip-summary"><strong>${details.days} 天車宿建議</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${loadingDirectory}${directoryNotice}${routeNotice}${dayCards}`;
   }
 
   function parseCsv(text) {

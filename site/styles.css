@@ -30,3 +30,31 @@
 .food-actions .compact-field{width:auto}
 .food-actions .button{width:100%}
 @media(max-width:650px){.food-actions{grid-template-columns:1fr 1fr}.food-actions .compact-field{grid-column:1/-1;width:auto}.food-actions .button{width:100%;min-width:0}}
+
+.day-distance{display:grid;gap:4px;text-align:right;min-width:145px}
+.day-distance small{font-size:10px;color:var(--muted);font-weight:400}
+.day-main{min-width:0}
+.day-plan-section{margin-top:17px;padding-top:14px;border-top:1px solid var(--line)}
+.day-plan-section h4{margin:0 0 9px;font-size:12px;color:var(--ink)}
+.backup-list,.nearby-attraction-list{display:grid;gap:7px;margin:0;padding:0;list-style:none}
+.backup-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#fbfcfa}
+.backup-rank{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--mint);color:var(--green);font-size:10px;font-weight:700}
+.backup-list li div,.nearby-attraction-list li{display:grid;gap:3px;min-width:0}
+.backup-list strong,.nearby-attraction-list a{font-size:11px;color:var(--ink);text-decoration:none}
+.backup-list small,.nearby-attraction-list small{font-size:10px;color:var(--muted);line-height:1.5}
+.backup-list a,.day-route-table a{font-size:10px;color:var(--green2);text-decoration:none;font-weight:700;white-space:nowrap}
+.day-route-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+.day-route-table{width:100%;min-width:650px;border-collapse:collapse;background:#fff;font-size:10px}
+.day-route-table th,.day-route-table td{padding:9px 10px;border-bottom:1px solid #edf0ed;text-align:left;vertical-align:top}
+.day-route-table thead th{background:#f3f6f2;color:#68786f;font-size:9px;white-space:nowrap}
+.day-route-table tbody th{font-weight:600;color:var(--ink)}
+.day-route-table tbody th small{display:block;margin-top:4px;color:var(--muted);font-size:9px;font-weight:400;line-height:1.5}
+.day-route-table .main-route-row{background:#fbfcfa}
+.day-route-table .meal-section-row th{background:#f5f8f5;color:var(--green);font-size:10px}
+.day-route-table .meal-missing-row th{color:var(--muted);font-weight:400}
+.day-route-table tbody tr:last-child th,.day-route-table tbody tr:last-child td{border-bottom:0}
+.nearby-attraction-list li{grid-template-columns:minmax(0,1fr) auto;align-items:start;padding:7px 0;border-bottom:1px solid #edf0ed}
+.nearby-attraction-list li:last-child{border-bottom:0}
+.plan-progress{margin:10px 0;padding:9px 11px;border-radius:8px;background:#edf3ef;color:#506d5e;font-size:10px}
+.plan-warning a,.form-disclaimer a{color:var(--green2)}
+@media(max-width:650px){.day-distance{min-width:0;font-size:10px}.day-distance small{font-size:9px}.day-plan-section{margin-top:14px;padding-top:12px}.backup-list li{grid-template-columns:22px minmax(0,1fr) auto;gap:7px;padding:8px}.backup-list strong,.nearby-attraction-list a{font-size:10px}.backup-list small,.nearby-attraction-list small{font-size:9px}.day-route-table{min-width:610px}.day-route-table th,.day-route-table td{padding:8px}}
