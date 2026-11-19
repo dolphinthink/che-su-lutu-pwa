@@ -48,6 +48,7 @@
   let lastTripRouteRequestAt = 0;
   const tripRoadMetricCache = new Map();
   const tripMealAvailabilityCache = new Map();
+  const tripStartLocationCache = new Map();
   let selectedSpotUpdateId = null;
   let sourceSpots = [];
   let sourceSpotsReady = false;
@@ -1811,7 +1812,67 @@
     return true;
   }
 
-  async function planTrip() {
+  function parseTripStartCoordinates(query) {
+    const parts = String(query || "").trim().match(/^([+-]?\d+(?:\.\d+)?)\s*[,，\s]\s*([+-]?\d+(?:\.\d+)?)$/u);
+    if (!parts) return null;
+    const lat = Number(parts[1]);
+    const lon = Number(parts[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      throw new Error("座標格式不正確，請依「緯度, 經度」輸入，例如 25.033, 121.565。");
+    }
+    return { lat, lon };
+  }
+
+  async function resolveTripStartLocation(query) {
+    const coordinates = parseTripStartCoordinates(query);
+    if (coordinates) {
+      return { ...coordinates, label: `手動座標 ${coordinates.lat.toFixed(5)}, ${coordinates.lon.toFixed(5)}` };
+    }
+
+    const normalizedQuery = normalizeSearchText(query);
+    const exactSpot = spots.find(spot => normalizeSearchText(spot.name) === normalizedQuery);
+    if (exactSpot) {
+      return {
+        lat: Number(exactSpot.lat),
+        lon: Number(exactSpot.lon),
+        label: exactSpot.name,
+        spotId: exactSpot.id
+      };
+    }
+    if (tripStartLocationCache.has(normalizedQuery)) return tripStartLocationCache.get(normalizedQuery);
+
+    const url = new URL("https://photon.komoot.io/api/");
+    url.searchParams.set("q", query);
+    url.searchParams.set("countrycode", "TW");
+    url.searchParams.set("limit", "1");
+    url.searchParams.set("lang", "zh");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`地名查詢服務回應 HTTP ${response.status}`);
+      const data = await response.json();
+      const feature = data.features?.find(item => item?.geometry?.coordinates?.length >= 2);
+      if (!feature) throw new Error("找不到這個地點，請輸入更完整的地名、地址或座標。");
+      const [lon, lat] = feature.geometry.coordinates.map(Number);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("查詢結果沒有有效座標，請改輸入緯度與經度。");
+      const place = feature.properties || {};
+      const mainName = place.name || place.street || query;
+      const detail = [place.district, place.city, place.county, place.state]
+        .find(value => value && normalizeSearchText(value) !== normalizeSearchText(mainName));
+      const result = { lat, lon, label: detail ? `${mainName}（${detail}）` : mainName };
+      tripStartLocationCache.set(normalizedQuery, result);
+      return result;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("地名查詢逾時，請稍後再試，或直接輸入緯度與經度。");
+      if (error instanceof TypeError) throw new Error("目前無法連線查詢地名；可檢查網路，或直接輸入緯度與經度。");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function planTrip(manualStart = null) {
     const planSequence = ++tripPlanSequence;
     parseRequirementsFromText();
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
@@ -1820,8 +1881,11 @@
     const startChoice = $("#startSpot").value;
     let current;
     let startLabel;
-    const startingSpot = startChoice === "current" ? null : getSpot(startChoice);
-    if (startingSpot) {
+    const startingSpot = manualStart?.spotId ? getSpot(manualStart.spotId) : startChoice === "current" ? null : getSpot(startChoice);
+    if (manualStart) {
+      current = { lat: manualStart.lat, lon: manualStart.lon };
+      startLabel = manualStart.label;
+    } else if (startingSpot) {
       current = { lat: Number(startingSpot.lat), lon: Number(startingSpot.lon) };
       startLabel = startingSpot.name;
     } else if (userPosition) {
@@ -2194,13 +2258,36 @@
       setTimeout(() => map?.invalidateSize(), 220);
     });
     $("#mapRetry").addEventListener("click", loadMapBackground);
+    $("#startLocationInput").addEventListener("input", () => {
+      const status = $("#startLocationStatus");
+      status.textContent = $("#startLocationInput").value.trim()
+        ? "自訂起點會優先於下方選項；座標可以不連線直接使用。"
+        : "輸入地名會由 Photon（OpenStreetMap）查詢座標；也可直接輸入緯度, 經度。";
+    });
     $("#planForm").addEventListener("submit", async event => {
       event.preventDefault();
       parseRequirementsFromText();
-      if ($("#startSpot").value === "current" && !userPosition) {
+      const startQuery = $("#startLocationInput").value.trim();
+      let manualStart = null;
+      const submitButton = event.currentTarget.querySelector("button[type='submit']");
+      if (startQuery) {
+        submitButton.disabled = true;
+        $("#startLocationStatus").textContent = "正在查詢輸入的起點…";
+        try {
+          manualStart = await resolveTripStartLocation(startQuery);
+          $("#startLocationStatus").textContent = `起點解析為：${manualStart.label}（${manualStart.lat.toFixed(5)}, ${manualStart.lon.toFixed(5)}）`;
+        } catch (error) {
+          $("#startLocationStatus").textContent = error.message;
+          notify(error.message);
+          return;
+        } finally {
+          submitButton.disabled = false;
+        }
+      }
+      if (!manualStart && $("#startSpot").value === "current" && !userPosition) {
         try { await locateUser(); } catch (error) { notify(error.message); return; }
       }
-      planTrip();
+      planTrip(manualStart);
     });
     $("#foodSpotSelect").addEventListener("change", handleFoodSpotChange);
     $("#foodRadius").addEventListener("change", searchFood);

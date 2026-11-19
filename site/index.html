@@ -11,9 +11,9 @@
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-180.png">
   <link rel="stylesheet" href="./assets/vendor/leaflet.css">
-  <link rel="stylesheet" href="./styles.css?v=20261119-02">
+  <link rel="stylesheet" href="./styles.css?v=20261119-03">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261119-02"></script>
+  <script defer src="./app.js?v=20261119-03"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -81,7 +81,7 @@
           <label class="field"><span>用一句話描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：四天三夜，想走海線和溫泉，每天不要開太遠，從目前位置出發"></textarea><small>可輸入海邊、山區、溫泉、廟宇、休息站等偏好。</small></label>
           <div class="form-grid three-cols">
             <label class="field"><span>行程天數</span><select id="daysInput"><option value="1">1 天</option><option value="2">2 天</option><option value="3" selected>3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option><option value="8">8 天</option><option value="9">9 天</option><option value="10">10 天</option><option value="11">11 天</option><option value="12">12 天</option><option value="13">13 天</option><option value="14">14 天</option></select></label>
-            <label class="field"><span>起點</span><select id="startSpot"><option value="current">目前位置（先定位）</option></select></label>
+            <label class="field"><span>選擇泊點或輸入起點</span><select id="startSpot"><option value="current">目前位置（先定位）</option></select><input id="startLocationInput" type="text" maxlength="120" autocomplete="street-address" placeholder="或輸入地名、地址、緯度, 經度" aria-describedby="startLocationStatus"><small id="startLocationStatus" aria-live="polite">輸入地名會由 Photon（OpenStreetMap）查詢座標；也可直接輸入緯度, 經度。</small></label>
             <label class="field"><span>每日直線距離上限</span><select id="maxKm"><option value="80">80 公里</option><option value="120">120 公里</option><option value="160" selected>160 公里</option><option value="220">220 公里</option><option value="300">300 公里</option><option value="500">不限制（500 公里）</option></select></label>
           </div>
           <fieldset class="preferences"><legend>想優先安排</legend>
