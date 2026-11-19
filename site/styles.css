@@ -74,3 +74,22 @@
 .trip-schedule-table td a{font-size:10px;font-weight:600;white-space:nowrap}
 .trip-schedule-table td small a{font-size:9px;white-space:normal}
 @media(max-width:650px){.route-schedule{margin:14px 0 20px}.route-day-card{padding:10px}.route-day-card>header{display:grid;gap:4px}.route-day-card>header strong{font-size:11px}.trip-schedule-table{min-width:820px}}
+.backup-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.backup-actions button,.route-stop-edit-actions button{min-height:30px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:#edf4ef;color:var(--green);font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+.backup-actions button:disabled,.route-stop-edit-actions button:disabled{opacity:.55;cursor:wait}
+.route-day-tools{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.route-day-tools label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px}
+.route-day-tools input{width:94px;min-height:32px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:inherit;font-size:11px}
+.route-day-tools input:disabled{opacity:.6}
+.route-stop-adjustment{margin-top:7px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fbfcfa;white-space:normal}
+.route-stop-adjustment summary{color:var(--green2);font-size:10px;font-weight:700;cursor:pointer}
+.route-stop-adjustment form{display:grid;gap:8px;min-width:240px;max-width:330px;margin-top:8px}
+.route-stop-adjustment form>label,.route-stop-coordinates label{display:grid;gap:4px;color:var(--muted);font-size:9px;white-space:normal}
+.route-stop-adjustment input{width:100%;min-width:0;min-height:32px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:10px}
+.route-stop-adjustment input:disabled{opacity:.6}
+.route-stop-coordinates{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.route-stop-edit-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.route-stop-adjustment form>small{color:var(--muted);font-size:9px;line-height:1.5}
+.trip-share-capture .route-stop-adjustment,.trip-share-capture .backup-replace-button,.trip-share-capture .route-day-tools{display:none!important}
+@media(max-width:650px){.route-day-tools{justify-content:flex-start;gap:8px}.backup-actions{gap:5px}.backup-actions button{padding:4px 6px;font-size:9px}.route-stop-adjustment form{min-width:220px;max-width:270px}}
+@media(max-width:650px){.day-heading{display:grid;gap:5px}.day-distance{justify-items:start;text-align:left;white-space:normal}}

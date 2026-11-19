@@ -45,6 +45,15 @@
   let lastAttractionSearch = null;
   let showingSavedAttractions = false;
   let tripPlanSequence = 0;
+  let tripAdjustmentSequence = 0;
+  let activeTripPlanSequence = 0;
+  let activeTripScheduleDays = [];
+  let activeTripItinerary = [];
+  let activeTripDetails = null;
+  let activeTripFoodPoints = [];
+  let activeTripAttractionPoints = [];
+  let activeTripDirectoryError = false;
+  let activeTripRouteError = false;
   let lastTripRouteRequestAt = 0;
   const tripRoadMetricCache = new Map();
   const tripMealAvailabilityCache = new Map();
@@ -632,6 +641,21 @@
     return spots.find(spot => spot.id === id);
   }
 
+  function getPlannedSpot(id) {
+    return getSpot(id) || activeTripItinerary.find(item => item.spot.id === id)?.spot;
+  }
+
+  function selectSpotForSearch(selector, spot) {
+    const select = $(selector);
+    if (![...select.options].some(option => option.value === spot.id)) {
+      const option = document.createElement("option");
+      option.value = spot.id;
+      option.textContent = `${spot.name}（${Number(spot.lat).toFixed(5)}, ${Number(spot.lon).toFixed(5)}）`;
+      select.add(option);
+    }
+    select.value = spot.id;
+  }
+
   function updateAttractionCurrentLocationOption() {
     const option = $("#attractionSpotSelect option[value='current']");
     if (option && userPosition) option.textContent = `目前位置 (${userPosition.lat.toFixed(5)}, ${userPosition.lon.toFixed(5)})`;
@@ -982,18 +1006,18 @@
   }
 
   function handleSpotAction(action, id) {
-    const spot = getSpot(id);
+    const spot = getPlannedSpot(id);
     if (!spot) return;
     if (action === "details") openSpotDialog(spot);
     if (action === "favorite") toggleFavorite(id);
     if (action === "map") centerOnSpot(spot);
     if (action === "food") {
-      $("#foodSpotSelect").value = id;
+      selectSpotForSearch("#foodSpotSelect", spot);
       switchTab("food");
       searchFood();
     }
     if (action === "attractions") {
-      $("#attractionSpotSelect").value = id;
+      selectSpotForSearch("#attractionSpotSelect", spot);
       switchTab("attractions");
       searchNearbyAttractions();
     }
@@ -1142,7 +1166,7 @@
     const selectedSpotValue = $("#foodSpotSelect").value;
     const spot = selectedSpotValue === "current"
       ? userPosition && { id: `current_${stableId(userPosition.lat, userPosition.lon)}`, name: "目前位置", ...userPosition }
-      : getSpot(selectedSpotValue);
+      : getPlannedSpot(selectedSpotValue);
     if (!spot) return showFoodStatus("先定位或選擇泊點", "按「定位附近」搜尋目前位置，或從清單選擇一個泊點。 ");
     const radius = Number($("#foodRadius").value);
     const key = `${spot.id}_${radius}`;
@@ -1529,7 +1553,7 @@
         }
       }
       spot = { id: `current_${stableId(userPosition.lat, userPosition.lon)}`, name: "目前位置", ...userPosition };
-    } else spot = getSpot($("#attractionSpotSelect").value);
+    } else spot = getPlannedSpot($("#attractionSpotSelect").value);
     if (!spot) return showAttractionStatus("先選擇搜尋中心", "選擇一個泊點或定位目前位置後即可查詢周邊景點。");
     showingSavedAttractions = false;
     updateSavedAttractionsButton();
@@ -2139,6 +2163,15 @@
 
   async function planTrip(manualStart = null, routeRequest = null, resolvedRouteDays = null) {
     const planSequence = ++tripPlanSequence;
+    tripAdjustmentSequence++;
+    activeTripPlanSequence = planSequence;
+    activeTripScheduleDays = [];
+    activeTripItinerary = [];
+    activeTripDetails = null;
+    activeTripFoodPoints = [];
+    activeTripAttractionPoints = [];
+    activeTripDirectoryError = false;
+    activeTripRouteError = false;
     parseRequirementsFromText();
     $("#planExportToolbar").hidden = true;
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
@@ -2228,7 +2261,7 @@
         routeOriginName = choice.spot.name;
       }
     }
-    const details = { days, nights, destinationPlan: Boolean(routeRequest), maxKm, preferences, startLabel, exceeded, needs: $("#needsInput").value.trim() };
+    const details = { days, nights, destinationPlan: Boolean(routeRequest), maxKm, preferences, startLabel, startingSpotId: startingSpot?.id || manualStart?.spotId || "", exceeded, needs: $("#needsInput").value.trim() };
     if (!itinerary.length && !routeRequest) {
       renderItinerary(itinerary, details);
       return;
@@ -2259,6 +2292,12 @@
       }
     }
     if (planSequence !== tripPlanSequence) return;
+    activeTripScheduleDays = scheduleDays;
+    activeTripItinerary = itinerary;
+    activeTripDetails = details;
+    activeTripFoodPoints = foodPoints;
+    activeTripAttractionPoints = attractionPoints;
+    activeTripDirectoryError = directoryError;
     if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: "loading" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: "loading" });
 
@@ -2269,6 +2308,7 @@
       routeError = true;
     }
     if (planSequence !== tripPlanSequence) return;
+    activeTripRouteError = routeError;
     if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: routeError ? "unavailable" : "ready" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: routeError ? "unavailable" : "ready" });
     $("#planExportToolbar").hidden = !itinerary.length && !scheduleDays.length;
@@ -2304,19 +2344,21 @@
 
       let clockMinute = day.departureMinute;
       let clockKnown = true;
-      for (const leg of day.legs || []) {
+      for (const [legIndex, leg] of (day.legs || []).entries()) {
         const metric = leg.roadMetrics;
         if (metric) clockMinute += metric.durationS / 60;
         else clockKnown = false;
         const destination = leg.destination;
         const time = options.routeStatus === "loading" ? "計算中…" : clockKnown ? formatTripClock(clockMinute) : "待查";
-        let title = destination.type === "attraction" ? `景點：${destination.name}`
-          : destination.type === "meal" ? `${destination.meal}：${destination.name}`
+        const placeName = destination.name || destination.label || "自訂停留點";
+        let title = destination.type === "attraction" ? `景點：${placeName}`
+          : destination.type === "meal" ? `${destination.meal || "用餐"}：${placeName}`
             : destination.type === "overnight" ? `泊點：${destination.label}`
               : destination.type === "return" ? `返抵起點：${destination.label}`
                 : `抵達：${destination.label}`;
         let stop = destination.dwellMinutes ? `約 ${destination.dwellMinutes} 分鐘` : destination.type === "overnight" ? "過夜" : "—";
         let details = `<a href="${escapeHtml(mapsDirectionsUrl(leg.origin, destination))}" target="_blank" rel="noopener">本段導航 ↗</a>`;
+        let editorMarkup = "";
         if (destination.type === "attraction") {
           const url = googleSearchUrl(destination.name, destination.lat, destination.lon, "near");
           details += `　<a href="${escapeHtml(url)}" target="_blank" rel="noopener">景點資訊 ↗</a>`;
@@ -2326,7 +2368,14 @@
         } else if (destination.type === "overnight") {
           details += `<small>目的地：${escapeHtml(day.destinationName)}${day.destinationDistanceKm > 2 ? ` · 泊點距目的地約 ${day.destinationDistanceKm.toFixed(1)} 公里（直線）` : ""}</small>`;
         }
-        rows.push(`<tr><td>${time}</td><th>${escapeHtml(title)}</th><td>${metric ? formatDriveDistance(metric.distanceM) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${metric ? formatDriveDuration(metric.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${stop}</td><td>${details}</td></tr>`);
+        if (["attraction", "meal", "overnight"].includes(destination.type)) {
+          const disabled = options.routeStatus === "loading" ? " disabled" : "";
+          const latitude = Number(destination.lat);
+          const longitude = Number(destination.lon);
+          const editor = `<details class="route-stop-adjustment"><summary>${options.routeStatus === "loading" ? "正在更新…" : "調整此停留點"}</summary><form data-trip-stop-edit data-day="${day.day}" data-leg="${legIndex}"><label>地點名稱<input name="name" required maxlength="100" value="${escapeHtml(placeName)}"${disabled}></label><div class="route-stop-coordinates"><label>緯度<input name="lat" type="number" min="-90" max="90" step="any" required value="${Number.isFinite(latitude) ? latitude.toFixed(6) : ""}"${disabled}></label><label>經度<input name="lon" type="number" min="-180" max="180" step="any" required value="${Number.isFinite(longitude) ? longitude.toFixed(6) : ""}"${disabled}></label></div>${destination.type === "overnight" ? "" : `<label>停留時間（分鐘）<input name="dwell" type="number" min="0" max="720" step="5" value="${Math.max(0, Number(destination.dwellMinutes) || 0)}"${disabled}></label>`}<div class="route-stop-edit-actions"><button type="submit"${disabled}>套用</button>${["attraction", "meal"].includes(destination.type) ? `<button type="button" data-trip-stop-move data-day="${day.day}" data-leg="${legIndex}" data-delta="-1"${legIndex === 0 ? " disabled" : disabled}>提前</button><button type="button" data-trip-stop-move data-day="${day.day}" data-leg="${legIndex}" data-delta="1"${!(["attraction", "meal"].includes(day.legs?.[legIndex + 1]?.destination?.type)) ? " disabled" : disabled}>延後</button><button type="button" class="secondary" data-trip-stop-remove data-day="${day.day}" data-leg="${legIndex}"${disabled}>移除此點</button>` : ""}</div><small>只修改這個停留點；其餘安排會保留，受影響路段會重新計算。</small></form></details>`;
+          editorMarkup = editor;
+        }
+        rows.push(`<tr><td>${time}</td><th>${escapeHtml(title)}${editorMarkup}</th><td>${metric ? formatDriveDistance(metric.distanceM) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${metric ? formatDriveDuration(metric.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${stop}</td><td>${details}</td></tr>`);
         if (destination.dwellMinutes && clockKnown) clockMinute += destination.dwellMinutes;
       }
 
@@ -2339,10 +2388,212 @@
       const totalDuration = metrics.length === day.legs.length && metrics.length ? formatDriveDuration(metrics.reduce((sum, item) => sum + item.durationS, 0)) : day.routeMetrics ? `${formatDriveDuration(day.routeMetrics.durationS)}（未含停留繞路）` : "時間待查";
       const warning = day.exceeded ? `<p class="plan-warning">本日目的地超過設定的 ${day.maxKm || 160} 公里直線距離上限，仍依你描述的目的地安排。</p>` : "";
       const routeNotice = !day.routeAvailable ? `<p class="plan-warning">道路路線暫時無法取得；沿途點位以直線廊道估算，行車時間與里程請以導航確認。</p>` : "";
-      return `<article class="route-day-card"><header><strong>第 ${day.day} 天：${escapeHtml(day.originName)} → ${escapeHtml(day.destinationName)}</strong><span>預估開車 ${totalDistance} · ${totalDuration}</span></header>${warning}${routeNotice}<div class="day-route-table-wrap"><table class="day-route-table trip-schedule-table" aria-label="第 ${day.day} 天預計行程時間與里程"><thead><tr><th>預計時間</th><th>停留點／安排</th><th>本段里程</th><th>行車時間</th><th>停留時間</th><th>導航／推薦</th></tr></thead><tbody>${rows.join("")}</tbody></table></div></article>`;
+      return `<article class="route-day-card"><header><strong>第 ${day.day} 天：${escapeHtml(day.originName)} → ${escapeHtml(day.destinationName)}</strong><div class="route-day-tools"><label>出發時間<input type="time" data-trip-departure-time="${day.day}" value="${formatTripClock(day.departureMinute)}"${options.routeStatus === "loading" ? " disabled" : ""}></label><span>預估開車 ${totalDistance} · ${totalDuration}</span></div></header>${warning}${routeNotice}<div class="day-route-table-wrap"><table class="day-route-table trip-schedule-table" aria-label="第 ${day.day} 天預計行程時間與里程"><thead><tr><th>預計時間</th><th>停留點／安排</th><th>本段里程</th><th>行車時間</th><th>停留時間</th><th>導航／推薦</th></tr></thead><tbody>${rows.join("")}</tbody></table></div></article>`;
     }).join("");
     const overview = days.map(day => `第 ${day.day} 天由 ${day.originName} 前往${day.destinationName}${day.overnightSpot ? `，夜宿${day.endName}` : day.returnsToStart ? "，行程返回起點" : ""}`).join("；");
-    root.innerHTML = `<section class="trip-schedule"><div class="section-heading"><div><h2>每日路線與停留時間表</h2><span>依旅程描述安排：${escapeHtml(overview)}。每天列出沿途景點、用餐與停留點。</span></div></div>${cards}<p class="form-disclaimer">行車里程與時間依 OpenStreetMap 道路資料估算，不含即時路況。景點與店家營業狀況請出發前確認。</p></section>`;
+    root.innerHTML = `<section class="trip-schedule"><div class="section-heading"><div><h2>每日路線與停留時間表</h2><span>依旅程描述安排：${escapeHtml(overview)}。可個別修改停留點的名稱、位置與時間，或移動／移除該點；其他安排會保留。</span></div></div>${cards}<p class="form-disclaimer">行車里程與時間依 OpenStreetMap 道路資料估算，不含即時路況。景點與店家營業狀況請出發前確認。</p></section>`;
+  }
+
+  function rebuildTripScheduleLegs(day, destinations = (day.legs || []).map(leg => leg.destination)) {
+    const origin = { ...day.origin, label: day.originName, type: "origin" };
+    day.routeMetrics = null;
+    day.legs = destinations.map((destination, index) => ({
+      origin: index === 0 ? origin : destinations[index - 1],
+      destination,
+      roadMetrics: null
+    }));
+    day.stops = destinations.filter(destination => ["attraction", "meal"].includes(destination.type));
+    const end = destinations.at(-1);
+    if (end) {
+      day.end = { lat: Number(end.lat), lon: Number(end.lon) };
+      day.endName = end.label || end.name || day.endName;
+    }
+  }
+
+  function createTripEditedSpot(lat, lon, name, previousSpot = null) {
+    const coordinateId = stableId(lat, lon);
+    const knownSpot = spots.find(spot => stableId(spot.lat, spot.lon) === coordinateId);
+    const previousMatches = previousSpot && stableId(previousSpot.lat, previousSpot.lon) === coordinateId;
+    const base = knownSpot || (previousMatches ? previousSpot : {});
+    return {
+      ...base,
+      id: knownSpot?.id || (previousMatches ? previousSpot.id : coordinateId),
+      name,
+      lat,
+      lon,
+      county: countyAtPoint(lon, lat) || base.county || "",
+      overnightEligible: true
+    };
+  }
+
+  function refreshTripParkingSuggestions(item, center) {
+    if (!item) return;
+    item.distance = haversineKm(item.origin, center);
+    item.hits = preferenceHits(center, activeTripDetails?.preferences || []);
+    item.foods = recommendFoodsByMeal(activeTripFoodPoints, center);
+    for (const group of Object.values(item.foods)) {
+      for (const food of group.foods || []) food.roadMetrics = null;
+    }
+    item.attractions = closestDirectoryPoints(activeTripAttractionPoints, center, 25, 5);
+    const excludedIds = new Set(activeTripItinerary.map(planItem => planItem.spot.id));
+    if (activeTripDetails?.startingSpotId) excludedIds.add(activeTripDetails.startingSpotId);
+    item.backups = closestBackupSpots(center, excludedIds);
+  }
+
+  function updateOvernightInRoute(dayIndex, spot) {
+    const day = activeTripScheduleDays[dayIndex];
+    if (!day) return;
+    day.overnightSpot = spot;
+    day.destinationDistanceKm = haversineKm(day.destinationPoint, spot);
+    day.routeMetrics = null;
+    day.dinnerOptions = recommendFoodsByMeal(
+      closestDirectoryPoints(activeTripFoodPoints, spot, 8, 90),
+      spot
+    ).dinner.foods;
+    const destinations = (day.legs || []).map(leg => leg.destination);
+    const finalDestination = destinations.at(-1);
+    if (finalDestination?.type === "overnight") {
+      destinations[destinations.length - 1] = { ...finalDestination, ...spot, label: spot.name, type: "overnight" };
+    }
+    rebuildTripScheduleLegs(day, destinations);
+
+    for (let index = dayIndex + 1; index < activeTripScheduleDays.length; index++) {
+      const previousDay = activeTripScheduleDays[index - 1];
+      const nextDay = activeTripScheduleDays[index];
+      nextDay.origin = { ...previousDay.end };
+      nextDay.originName = previousDay.endName;
+      nextDay.routeMetrics = null;
+      nextDay.breakfastOptions = recommendFoodsByMeal(
+        closestDirectoryPoints(activeTripFoodPoints, nextDay.origin, 8, 90),
+        nextDay.origin
+      ).breakfast.foods;
+      rebuildTripScheduleLegs(nextDay);
+      const nextItem = activeTripItinerary.find(planItem => planItem.day === nextDay.day);
+      if (nextItem) {
+        nextItem.origin = { ...nextDay.origin };
+        nextItem.originName = nextDay.originName;
+        nextItem.roadMetrics = null;
+        refreshTripParkingSuggestions(nextItem, nextItem.spot);
+      }
+    }
+  }
+
+  function syncTripBackups() {
+    const excludedIds = new Set(activeTripItinerary.map(item => item.spot.id));
+    if (activeTripDetails?.startingSpotId) excludedIds.add(activeTripDetails.startingSpotId);
+    for (const item of activeTripItinerary) {
+      item.backups = closestBackupSpots(item.spot, excludedIds);
+    }
+  }
+
+  async function refreshTripAfterPartialEdit(message) {
+    const adjustmentSequence = ++tripAdjustmentSequence;
+    const planSequence = activeTripPlanSequence;
+    if (activeTripScheduleDays.length) renderTripSchedule(activeTripScheduleDays, { routeStatus: "loading" });
+    renderItinerary(activeTripItinerary, activeTripDetails, {
+      directoryError: activeTripDirectoryError,
+      routeStatus: "loading"
+    });
+    let routeError = activeTripScheduleDays.some(day => !day.routeAvailable);
+    try {
+      await loadTripRoadMetrics(activeTripItinerary, activeTripScheduleDays);
+    } catch {
+      routeError = true;
+    }
+    if (adjustmentSequence !== tripAdjustmentSequence || planSequence !== activeTripPlanSequence) return;
+    activeTripRouteError = routeError;
+    const finalStatus = routeError ? "unavailable" : "ready";
+    if (activeTripScheduleDays.length) renderTripSchedule(activeTripScheduleDays, { routeStatus: finalStatus });
+    renderItinerary(activeTripItinerary, activeTripDetails, {
+      directoryError: activeTripDirectoryError,
+      routeStatus: finalStatus
+    });
+    $("#planExportToolbar").hidden = !activeTripItinerary.length && !activeTripScheduleDays.length;
+    notify(message);
+  }
+
+  function applyTripStopEdit(form) {
+    const dayNumber = Number(form.dataset.day);
+    const legIndex = Number(form.dataset.leg);
+    const day = activeTripScheduleDays.find(item => item.day === dayNumber);
+    const leg = day?.legs?.[legIndex];
+    if (!day || !leg) return;
+    const data = new FormData(form);
+    const name = String(data.get("name") || "").trim();
+    const lat = Number(data.get("lat"));
+    const lon = Number(data.get("lon"));
+    const dwell = data.has("dwell") ? Number(data.get("dwell")) : 0;
+    if (!name || name.length > 100) return notify("請輸入 1 到 100 個字的地點名稱。");
+    if (!Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || Math.abs(lon) > 180) return notify("請確認緯度與經度在有效範圍內。");
+    if (data.has("dwell") && (!Number.isFinite(dwell) || dwell < 0 || dwell > 720)) return notify("停留時間請設定在 0 到 720 分鐘之間。");
+
+    const previous = leg.destination;
+    if (previous.type === "overnight") {
+      const item = activeTripItinerary.find(planItem => planItem.day === dayNumber);
+      const spot = createTripEditedSpot(lat, lon, name, item?.spot || day.overnightSpot);
+      if (activeTripItinerary.some(planItem => planItem.day !== dayNumber && planItem.spot.id === spot.id)) {
+        return notify("這個泊點已安排在其他夜晚，請選擇不同位置。");
+      }
+      if (item) {
+        item.spot = spot;
+        item.roadMetrics = null;
+        refreshTripParkingSuggestions(item, spot);
+      }
+      updateOvernightInRoute(activeTripScheduleDays.indexOf(day), spot);
+      syncTripBackups();
+    } else {
+      const edited = { ...previous, name, lat, lon, dwellMinutes: dwell };
+      if (previous.type === "meal") edited.options = [{ ...previous, ...edited }];
+      const destinations = day.legs.map(item => item.destination);
+      destinations[legIndex] = edited;
+      rebuildTripScheduleLegs(day, destinations);
+    }
+    refreshTripAfterPartialEdit("已套用這項調整，受影響的行車時間與里程已更新。");
+  }
+
+  function removeTripStop(dayNumber, legIndex) {
+    const day = activeTripScheduleDays.find(item => item.day === dayNumber);
+    const leg = day?.legs?.[legIndex];
+    if (!leg || !["attraction", "meal"].includes(leg.destination.type)) return;
+    const destinations = day.legs.map(item => item.destination);
+    destinations.splice(legIndex, 1);
+    rebuildTripScheduleLegs(day, destinations);
+    refreshTripAfterPartialEdit("已移除這個停留點，其餘行程保留並重新計算受影響路段。");
+  }
+
+  function moveTripStop(dayNumber, legIndex, delta) {
+    const day = activeTripScheduleDays.find(item => item.day === dayNumber);
+    if (!day || !["attraction", "meal"].includes(day.legs?.[legIndex]?.destination?.type)) return;
+    const targetIndex = legIndex + delta;
+    if (!["attraction", "meal"].includes(day.legs?.[targetIndex]?.destination?.type)) return;
+    const destinations = day.legs.map(item => item.destination);
+    [destinations[legIndex], destinations[targetIndex]] = [destinations[targetIndex], destinations[legIndex]];
+    rebuildTripScheduleLegs(day, destinations);
+    refreshTripAfterPartialEdit("已調整停留順序，其餘行程保留並重新計算受影響路段。");
+  }
+
+  function replacePlannedOvernightSpot(dayNumber, spotId) {
+    const spot = getSpot(spotId);
+    const item = activeTripItinerary.find(planItem => planItem.day === dayNumber);
+    if (!spot || !item || activeTripItinerary.some(planItem => planItem.day !== dayNumber && planItem.spot.id === spot.id)) return;
+    item.spot = { ...spot };
+    item.roadMetrics = null;
+    refreshTripParkingSuggestions(item, item.spot);
+    const routeDayIndex = activeTripScheduleDays.findIndex(day => day.day === dayNumber);
+    if (routeDayIndex >= 0) updateOvernightInRoute(routeDayIndex, item.spot);
+    else {
+      for (const laterItem of activeTripItinerary.filter(planItem => planItem.day > dayNumber)) {
+        const previousItem = activeTripItinerary.find(planItem => planItem.day === laterItem.day - 1);
+        if (previousItem) {
+          laterItem.origin = { lat: Number(previousItem.spot.lat), lon: Number(previousItem.spot.lon) };
+          laterItem.originName = previousItem.spot.name;
+          laterItem.roadMetrics = null;
+          laterItem.distance = haversineKm(laterItem.origin, laterItem.spot);
+        }
+      }
+    }
+    syncTripBackups();
+    refreshTripAfterPartialEdit(`第 ${dayNumber} 天泊點已換成「${spot.name}」。`);
   }
 
   async function exportTripPlanPng() {
@@ -2366,6 +2617,7 @@
         if (!source?.textContent.trim()) continue;
         captureRoot.append(source.cloneNode(true));
       }
+      $$(".route-stop-adjustment, .backup-replace-button, .route-day-tools", captureRoot).forEach(control => control.remove());
       const now = new Date();
       const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const footer = document.createElement("p");
@@ -2443,7 +2695,7 @@
     const dayCards = items.map(item => {
       const hits = item.hits.length ? item.hits.map(key => `<span class="badge">符合${prefLabels[key]}</span>`).join("") : "";
       const warning = item.exceeded ? `<p class="plan-warning">此點超過設定的 ${details.maxKm} 公里直線上限，是當下可選的最近點。</p>` : "";
-      const backupRows = (item.backups || []).map((backup, index) => `<li><span class="backup-rank">${index + 1}</span><div><strong>${escapeHtml(backup.spot.name)}</strong><small>距規劃泊點 ${formatDistanceKm(backup.distanceKm)}（直線）</small></div><a href="${escapeHtml(mapsDirectionsUrl(item.origin, backup.spot))}" target="_blank" rel="noopener">導航 ↗</a></li>`).join("") || `<li>沒有其他可用的備援泊點。</li>`;
+      const backupRows = (item.backups || []).map((backup, index) => `<li><span class="backup-rank">${index + 1}</span><div><strong>${escapeHtml(backup.spot.name)}</strong><small>距規劃泊點 ${formatDistanceKm(backup.distanceKm)}（直線）</small></div><div class="backup-actions"><a href="${escapeHtml(mapsDirectionsUrl(item.origin, backup.spot))}" target="_blank" rel="noopener">導航 ↗</a><button type="button" class="backup-replace-button" data-replace-overnight-day="${item.day}" data-replace-overnight-spot="${escapeHtml(backup.spot.id)}"${options.routeStatus === "loading" ? " disabled" : ""}>改用此泊點</button></div></li>`).join("") || `<li>沒有其他可用的備援泊點。</li>`;
       const foodRows = item.foods === null && options.loadingData
         ? `<tr><td colspan="5">正在載入美食目錄…</td></tr>`
         : [
@@ -2721,8 +2973,37 @@
       if (button) handleSpotAction(button.dataset.action, button.dataset.id);
     });
     $("#itinerary").addEventListener("click", event => {
+      const replaceButton = event.target.closest("[data-replace-overnight-day]");
+      if (replaceButton) {
+        replacePlannedOvernightSpot(Number(replaceButton.dataset.replaceOvernightDay), replaceButton.dataset.replaceOvernightSpot);
+        return;
+      }
       const button = event.target.closest("[data-action]");
       if (button) handleSpotAction(button.dataset.action, button.dataset.id);
+    });
+    $("#routeSchedule").addEventListener("submit", event => {
+      const form = event.target.closest("[data-trip-stop-edit]");
+      if (!form) return;
+      event.preventDefault();
+      applyTripStopEdit(form);
+    });
+    $("#routeSchedule").addEventListener("click", event => {
+      const removeButton = event.target.closest("[data-trip-stop-remove]");
+      if (removeButton) {
+        removeTripStop(Number(removeButton.dataset.day), Number(removeButton.dataset.leg));
+        return;
+      }
+      const moveButton = event.target.closest("[data-trip-stop-move]");
+      if (moveButton) moveTripStop(Number(moveButton.dataset.day), Number(moveButton.dataset.leg), Number(moveButton.dataset.delta));
+    });
+    $("#routeSchedule").addEventListener("change", event => {
+      const input = event.target.closest("[data-trip-departure-time]");
+      if (!input) return;
+      const match = input.value.match(/^(\d{2}):(\d{2})$/u);
+      const day = activeTripScheduleDays.find(item => item.day === Number(input.dataset.tripDepartureTime));
+      if (!match || !day) return;
+      day.departureMinute = Number(match[1]) * 60 + Number(match[2]);
+      renderTripSchedule(activeTripScheduleDays, { routeStatus: activeTripRouteError ? "unavailable" : "ready" });
     });
     $("#mapExpand").addEventListener("click", () => {
       const card = $(".map-card");
@@ -2841,7 +3122,7 @@
     $("#spotDialog").addEventListener("click", event => {
       const button = event.target.closest("[data-dialog-action]");
       if (!button) return;
-      const spot = getSpot(button.dataset.id);
+      const spot = getPlannedSpot(button.dataset.id);
       $("#spotDialog").close?.();
       if (button.dataset.dialogAction === "food") handleSpotAction("food", button.dataset.id);
       if (button.dataset.dialogAction === "map") centerOnSpot(spot);
