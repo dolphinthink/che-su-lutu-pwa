@@ -2100,18 +2100,24 @@
     }
     if (tripStartLocationCache.has(normalizedQuery)) return tripStartLocationCache.get(normalizedQuery);
 
+    const countyMatches = countyBoundaries.filter(boundary => normalizedQuery === boundary.normalizedName || normalizedQuery === boundary.shortName);
+    const countyBoundary = countyMatches.length === 1 ? countyMatches[0] : null;
     const url = new URL("https://photon.komoot.io/api/");
-    url.searchParams.set("q", query);
+    url.searchParams.set("q", countyBoundary ? countyBoundary.normalizedName : query);
     url.searchParams.set("countrycode", "TW");
-    url.searchParams.set("limit", "1");
-    url.searchParams.set("lang", "zh");
+    url.searchParams.set("limit", "5");
+    if (countyBoundary) url.searchParams.set("layer", "city");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
     try {
       const response = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error(`地名查詢服務回應 HTTP ${response.status}`);
       const data = await response.json();
-      const feature = data.features?.find(item => item?.geometry?.coordinates?.length >= 2);
+      const features = (data.features || []).filter(item => item?.geometry?.coordinates?.length >= 2);
+      const feature = countyBoundary
+        ? features[0]
+        : features.find(item => [item.properties?.name, item.properties?.street, item.properties?.district, item.properties?.city, item.properties?.county]
+          .some(value => value && normalizeSearchText(value) === normalizedQuery)) || features[0];
       if (!feature) throw new Error("找不到這個地點，請輸入更完整的地名、地址或座標。");
       const [lon, lat] = feature.geometry.coordinates.map(Number);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("查詢結果沒有有效座標，請改輸入緯度與經度。");
