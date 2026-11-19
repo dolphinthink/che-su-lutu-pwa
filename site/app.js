@@ -2140,6 +2140,7 @@
   async function planTrip(manualStart = null, routeRequest = null, resolvedRouteDays = null) {
     const planSequence = ++tripPlanSequence;
     parseRequirementsFromText();
+    $("#planExportToolbar").hidden = true;
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
     const maxKm = Number($("#maxKm").value) || 160;
     const preferences = $$("input[name='pref']:checked").map(input => input.value);
@@ -2270,6 +2271,7 @@
     if (planSequence !== tripPlanSequence) return;
     if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: routeError ? "unavailable" : "ready" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: routeError ? "unavailable" : "ready" });
+    $("#planExportToolbar").hidden = !itinerary.length && !scheduleDays.length;
   }
 
   function formatTripClock(minutes) {
@@ -2341,6 +2343,88 @@
     }).join("");
     const overview = days.map(day => `第 ${day.day} 天由 ${day.originName} 前往${day.destinationName}${day.overnightSpot ? `，夜宿${day.endName}` : day.returnsToStart ? "，行程返回起點" : ""}`).join("；");
     root.innerHTML = `<section class="trip-schedule"><div class="section-heading"><div><h2>每日路線與停留時間表</h2><span>依旅程描述安排：${escapeHtml(overview)}。每天列出沿途景點、用餐與停留點。</span></div></div>${cards}<p class="form-disclaimer">行車里程與時間依 OpenStreetMap 道路資料估算，不含即時路況。景點與店家營業狀況請出發前確認。</p></section>`;
+  }
+
+  async function exportTripPlanPng() {
+    const button = $("#exportTripPngButton");
+    if (typeof window.html2canvas !== "function") {
+      notify("PNG 匯出工具尚未載入，請重新整理後再試。");
+      return;
+    }
+
+    let captureRoot;
+    button.disabled = true;
+    button.textContent = "正在製作 PNG…";
+    try {
+      const cssWidth = 1040;
+      captureRoot = document.createElement("div");
+      captureRoot.className = "trip-share-capture";
+      captureRoot.style.cssText = `position:fixed;left:-100000px;top:0;width:${cssWidth}px;padding:34px;background:#f7f8f5;color:#173e34;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-sizing:border-box;`;
+      captureRoot.innerHTML = `<header style="margin:0 0 20px;padding:0 0 16px;border-bottom:1px solid #dce5df"><p style="margin:0 0 7px;color:#789087;font-size:12px;letter-spacing:2px;font-weight:700">車宿旅圖・行程分享</p><h1 style="margin:0 0 6px;font-size:26px;line-height:1.3">行程規劃</h1><p style="margin:0;color:#738078;font-size:13px;line-height:1.6">${escapeHtml($("#needsInput").value.trim() || "我的車宿旅程")}</p></header>`;
+      for (const selector of ["#routeSchedule", "#itinerary"]) {
+        const source = $(selector);
+        if (!source?.textContent.trim()) continue;
+        captureRoot.append(source.cloneNode(true));
+      }
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const footer = document.createElement("p");
+      footer.textContent = `由車宿旅圖匯出 · ${date}`;
+      footer.style.cssText = "margin:20px 0 0;padding-top:12px;border-top:1px solid #dce5df;color:#85938b;font-size:11px";
+      captureRoot.append(footer);
+      document.body.append(captureRoot);
+      if (document.fonts?.ready) await document.fonts.ready;
+
+      const cssHeight = Math.ceil(captureRoot.getBoundingClientRect().height);
+      if (!cssHeight) throw new Error("目前沒有可匯出的行程內容。");
+      const scale = Math.min(2, 16000 / cssHeight, 4200 / cssWidth, Math.sqrt(18000000 / (cssWidth * cssHeight)));
+      const canvas = await window.html2canvas(captureRoot, {
+        backgroundColor: "#f7f8f5",
+        scale,
+        width: cssWidth,
+        height: cssHeight,
+        windowWidth: cssWidth,
+        windowHeight: cssHeight,
+        scrollX: 0,
+        scrollY: 0,
+        logging: false
+      });
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(result => result ? resolve(result) : reject(new Error("PNG 圖片建立失敗。")), "image/png"));
+      const fileName = `車宿旅圖行程-${date}.png`;
+      let shared = false;
+      if (typeof navigator.share === "function" && typeof File === "function") {
+        try {
+          const file = new File([blob], fileName, { type: "image/png" });
+          const canShareFile = typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
+          if (canShareFile) {
+            await navigator.share({ title: "車宿旅圖行程", text: "分享我的車宿旅程規劃", files: [file] });
+            shared = true;
+          }
+        } catch (error) {
+          if (error.name === "AbortError") return;
+        }
+      }
+      if (shared) {
+        notify("已開啟行程圖片分享選單。");
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      const download = document.createElement("a");
+      download.href = objectUrl;
+      download.download = fileName;
+      document.body.append(download);
+      download.click();
+      download.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+      notify("行程 PNG 已下載。");
+    } catch (error) {
+      notify(error.message || "行程 PNG 製作失敗，請稍後再試。");
+    } finally {
+      captureRoot?.remove();
+      button.disabled = false;
+      button.textContent = "分享／匯出 PNG";
+    }
   }
 
   function renderItinerary(items, details, options = {}) {
@@ -2655,6 +2739,7 @@
     });
     $("#planForm").addEventListener("submit", async event => {
       event.preventDefault();
+      $("#planExportToolbar").hidden = true;
       parseRequirementsFromText();
       const startQuery = $("#startLocationInput").value.trim();
       const routeRequest = parseTripRouteRequest($("#needsInput").value, Number($("#daysInput").value) || 3);
@@ -2709,6 +2794,7 @@
       }
       planTrip(manualStart, routeRequest, resolvedRouteDays);
     });
+    $("#exportTripPngButton").addEventListener("click", exportTripPlanPng);
     $("#foodSpotSelect").addEventListener("change", handleFoodSpotChange);
     $("#foodRadius").addEventListener("change", searchFood);
     $("#locateFoodButton").addEventListener("click", locateAndSearchFood);

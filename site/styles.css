@@ -59,6 +59,12 @@
 .plan-warning a,.form-disclaimer a{color:var(--green2)}
 @media(max-width:650px){.day-distance{min-width:0;font-size:10px}.day-distance small{font-size:9px}.day-plan-section{margin-top:14px;padding-top:12px}.backup-list li{grid-template-columns:22px minmax(0,1fr) auto;gap:7px;padding:8px}.backup-list strong,.nearby-attraction-list a{font-size:10px}.backup-list small,.nearby-attraction-list small{font-size:9px}.day-route-table{min-width:610px}.day-route-table th,.day-route-table td{padding:8px}}
 .route-schedule{max-width:900px;margin:18px 0 24px}
+.plan-export-toolbar{max-width:900px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 4px;padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.plan-export-toolbar[hidden]{display:none}
+.plan-export-toolbar>div{display:grid;gap:3px}
+.plan-export-toolbar strong{font-size:12px;color:var(--ink)}
+.plan-export-toolbar small{font-size:10px;color:var(--muted)}
+@media(max-width:650px){.plan-export-toolbar{align-items:stretch;flex-direction:column}.plan-export-toolbar .button{width:100%}}
 .route-day-card{margin:0 0 12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
 .route-day-card>header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:11px}
 .route-day-card>header strong{font-size:12px;color:var(--ink)}

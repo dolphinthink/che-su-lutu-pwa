@@ -11,9 +11,10 @@
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-180.png">
   <link rel="stylesheet" href="./assets/vendor/leaflet.css">
-  <link rel="stylesheet" href="./styles.css?v=20261119-04">
+  <link rel="stylesheet" href="./styles.css?v=20261119-07">
   <script defer src="./assets/vendor/leaflet.js"></script>
-  <script defer src="./app.js?v=20261119-06"></script>
+  <script defer src="./assets/vendor/html2canvas.min.js"></script>
+  <script defer src="./app.js?v=20261119-07"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -94,6 +95,10 @@
           <button class="button button-primary button-wide" type="submit">規劃我的行程 <span>→</span></button>
           <p class="form-disclaimer">每日泊點先依偏好和直線距離安排；行車里程與時間會另外查詢道路資料。設施、營業和車泊規定請另外確認。</p>
         </form>
+        <div class="plan-export-toolbar" id="planExportToolbar" hidden>
+          <div><strong>行程已規劃完成</strong><small>可分享或下載成 PNG 圖片。</small></div>
+          <button class="button button-light" id="exportTripPngButton" type="button">分享／匯出 PNG</button>
+        </div>
         <div id="routeSchedule" class="route-schedule" aria-live="polite"></div>
         <div id="itinerary" class="itinerary" aria-live="polite"><div class="empty-state"><span class="empty-icon">✳</span><strong>你的行程會顯示在這裡</strong><p>先填寫天數和偏好，再按「規劃我的行程」。</p></div></div>
       </section>
