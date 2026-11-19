@@ -2635,7 +2635,7 @@
     if (!panel || (!activeTripScheduleDays.length && !activeTripItinerary.length)) return;
     panel.hidden = false;
     if (!tripAdjustmentConversation.length) {
-      appendTripConversationMessage("assistant", "行程已準備好。你可以直接告訴我想微調哪一天，例如「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」或「把午餐改到花蓮市區」。");
+      appendTripConversationMessage("assistant", "行程已準備好。你可以直接說想怎麼改，例如「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」或「第一晚改規劃外澳附近的泊點」；換泊點時會一併更新附近備援、景點和美食。");
     }
   }
 
@@ -2696,6 +2696,45 @@
     return items[0];
   }
 
+  function tripParkingLocationQuery(text) {
+    if (/備援|替代泊點/u.test(text) || !/(?:泊點|住宿|過夜|車泊)/u.test(text)) return "";
+    if (!/(?:改|調整|規劃|安排|找|尋找|選|挑|住|換|搬)/u.test(text)) return "";
+    const match = text.match(/(?:改規劃|改安排|改到|改成|改為|調整為|換到|換成|搬到|搬去|規劃|安排到|安排在|安排|尋找|選擇|挑選|找|選|挑|住在|住到|住)\s*(.+)$/u);
+    if (!match) return "";
+    return match[1]
+      .replace(/(?:的)?(?:泊點|停車點|住宿點|住宿|過夜點|車泊點).*$/u, "")
+      .replace(/(?:附近|周邊|一帶)$/u, "")
+      .replace(/^[到在往去至]+/u, "")
+      .replace(/[的、，。！？\s]+$/u, "")
+      .trim();
+  }
+
+  async function resolveTripLocationOrNamedSpot(query) {
+    try {
+      return await resolveTripStartLocation(query);
+    } catch (error) {
+      const normalized = normalizeSearchText(query);
+      const namedSpots = spots.filter(spot => normalizeSearchText(spot.name).includes(normalized));
+      if (!namedSpots.length) throw error;
+      const center = namedSpots.reduce((sum, spot) => ({
+        lat: sum.lat + Number(spot.lat) / namedSpots.length,
+        lon: sum.lon + Number(spot.lon) / namedSpots.length
+      }), { lat: 0, lon: 0 });
+      return { ...center, label: query + "（依本機泊點資料定位）" };
+    }
+  }
+
+  function findNearbyTripOvernightSpot(center, dayNumber, maxDistanceKm = 30) {
+    const usedElsewhere = new Set(activeTripItinerary
+      .filter(item => item.day !== dayNumber)
+      .map(item => item.spot.id));
+    if (activeTripDetails?.startingSpotId) usedElsewhere.add(activeTripDetails.startingSpotId);
+    return spots.filter(spot => spot.overnightEligible !== false && !usedElsewhere.has(spot.id))
+      .map(spot => ({ spot, distanceKm: haversineKm(center, spot) }))
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .filter(item => item.distanceKm <= maxDistanceKm);
+  }
+
   function parseTripDepartureMinute(text, currentMinute) {
     const match = text.match(/(?:上午|早上|下午|晚上)?\s*(\d{1,2})[:：](\d{2})/u);
     if (match && /出發|起程|時間|改成|調整/u.test(text)) {
@@ -2736,6 +2775,27 @@
       ? activeTripScheduleDays.filter(day => day.day === requestedDay)
       : /每天|每一天/u.test(text) ? activeTripScheduleDays : [];
     if (requestedDay && activeTripScheduleDays.length && !daysToAdjust.length) throw new Error("目前行程沒有第 " + requestedDay + " 天。");
+
+    const parkingLocationQuery = tripParkingLocationQuery(text);
+    if (parkingLocationQuery) {
+      const item = tripConversationOvernightItem(text);
+      const location = await resolveTripLocationOrNamedSpot(parkingLocationQuery);
+      const nearbySpots = findNearbyTripOvernightSpot(location, item.day, 30);
+      const nearest = nearbySpots[0];
+      if (!nearest) {
+        const closest = spots.filter(spot => spot.overnightEligible !== false)
+          .map(spot => ({ spot, distanceKm: haversineKm(location, spot) }))
+          .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+        throw new Error("「" + parkingLocationQuery + "」30 公里內沒有可用泊點" + (closest ? "；目前最近的是「" + closest.spot.name + "」，約 " + closest.distanceKm.toFixed(1) + " 公里。" : "。") + "我沒有替你改動原行程。");
+      }
+      await replacePlannedOvernightSpot(item.day, nearest.spot.id);
+      const updated = activeTripItinerary.find(planItem => planItem.day === item.day);
+      const mealCount = Object.values(updated?.foods || {}).reduce((count, group) => count + (group.foods || []).length, 0);
+      const backupCount = updated?.backups?.length || 0;
+      const attractionCount = updated?.attractions?.length || 0;
+      activeTripConversationContext = null;
+      return "已把第 " + item.day + " 晚改到「" + nearest.spot.name + "」（距「" + parkingLocationQuery + "」約 " + nearest.distanceKm.toFixed(1) + " 公里）。我也已依這個泊點更新 " + backupCount + " 個附近備援泊點、" + attractionCount + " 個附近景點和 " + mealCount + " 家三餐推薦；後續行程會從新泊點接續。";
+    }
 
     if (/備援|替代泊點/u.test(text)) {
       const item = tripConversationOvernightItem(text);
@@ -2882,7 +2942,7 @@
         : "第 " + day.day + " 天景點已改為「" + updated.name + "」（" + place.lat.toFixed(4) + ", " + place.lon.toFixed(4) + "）。";
     }
 
-    throw new Error("我還不能判斷要改哪一項。你可以說「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」、「刪除第一天景點」、「午餐提前」或「第一晚改用第一個備援泊點」。");
+    throw new Error("我還不能判斷要改哪一項。你可以說「第一天晚半小時出發」、「第二天午餐停留改成 90 分鐘」、「刪除第一天景點」、「午餐提前」、「第一晚改用第一個備援泊點」或「第一晚改規劃外澳附近的泊點」。");
   }
 
   async function submitTripAdjustment(event) {

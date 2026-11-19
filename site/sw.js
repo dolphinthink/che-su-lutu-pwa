@@ -1,9 +1,9 @@
-const CACHE_NAME = "che-su-lutu-shell-v51";
+const CACHE_NAME = "che-su-lutu-shell-v52";
 const CORE_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=20261119-11",
-  "./app.js?v=20261119-11",
+  "./styles.css?v=20261119-12",
+  "./app.js?v=20261119-12",
   "./manifest.webmanifest"
 ];
 const OPTIONAL_SHELL = [
