@@ -2277,11 +2277,11 @@
     return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
   }
 
-  function tripFoodOptionsMarkup(items, center, query) {
+  function tripFoodOptionsMarkup(items, center, query, origin = center) {
     if (items?.length) {
       return items.map((food, index) => {
-        const url = googleSearchUrl(food.name, food.lat, food.lon, "near");
-        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)} ↗</a>`;
+        const url = mapsDirectionsUrl(origin, food);
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)}・導航 ↗</a>`;
       }).join("　");
     }
     const url = googleSearchUrl(query, center.lat, center.lon, "near");
@@ -2320,7 +2320,7 @@
           details += `　<a href="${escapeHtml(url)}" target="_blank" rel="noopener">景點資訊 ↗</a>`;
           details += `<small>${escapeHtml(destination.category || "沿途景點")} · 預留停留 1 小時</small>`;
         } else if (destination.type === "meal") {
-          details += `<small>${tripFoodOptionsMarkup(destination.options, destination, "餐廳")}</small>`;
+          details += `<small>${tripFoodOptionsMarkup(destination.options, destination, "餐廳", leg.origin)}</small>`;
         } else if (destination.type === "overnight") {
           details += `<small>目的地：${escapeHtml(day.destinationName)}${day.destinationDistanceKm > 2 ? ` · 泊點距目的地約 ${day.destinationDistanceKm.toFixed(1)} 公里（直線）` : ""}</small>`;
         }
@@ -2373,7 +2373,7 @@
             const availability = food.mealAvailability === "open" ? "目錄時段涵蓋此餐期，請再確認" : "未提供可判讀的營業時段";
             const opening = String(food.opening || "").trim();
             const details = [address, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
-            return `<tr><th>${escapeHtml(food.name)}<small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
+            return `<tr><th><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">${escapeHtml(food.name)}・導航 ↗</a><small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
           }).join("");
           const fallbackUrl = escapeHtml(googleSearchUrl(`${meal.label} 餐廳`, item.spot.lat, item.spot.lon, "near"));
           const missingRows = Array.from({ length: Math.max(0, 3 - foods.length) }, (_, index) => `<tr class="meal-missing-row"><th>${meal.label}推薦 ${foods.length + index + 1}</th><td colspan="3">30 公里內沒有更多符合或時段未確認的目錄店家</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`).join("");
