@@ -1729,11 +1729,185 @@
     return `${stableId(origin.lat, origin.lon)}>${stableId(destination.lat, destination.lon)}`;
   }
 
-  async function loadTripRoadMetrics(items) {
-    const targets = items.flatMap(item => [
+  async function waitForTripRouteService() {
+    const waitMs = Math.max(0, 1100 - (Date.now() - lastTripRouteRequestAt));
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+    lastTripRouteRequestAt = Date.now();
+  }
+
+  async function fetchTripRoute(origin, destination) {
+    const coordinatePath = [origin, destination].map(point => `${Number(point.lon).toFixed(6)},${Number(point.lat).toFixed(6)}`).join(";");
+    const url = new URL(`https://router.project-osrm.org/route/v1/driving/${coordinatePath}`);
+    url.searchParams.set("overview", "full");
+    url.searchParams.set("geometries", "geojson");
+    url.searchParams.set("steps", "false");
+    await waitForTripRouteService();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`道路路線服務回應 HTTP ${response.status}`);
+      const data = await response.json();
+      const route = data.routes?.[0];
+      if (data.code !== "Ok" || !route) throw new Error(`道路路線服務回應 ${data.code || "未知狀態"}`);
+      return route;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function buildTripRouteShape(coordinates) {
+    const raw = Array.isArray(coordinates) ? coordinates : [];
+    if (raw.length < 2) return { points: [], segments: [], totalKm: 0, bounds: null };
+    const stride = Math.max(1, Math.ceil((raw.length - 1) / 220));
+    const sampled = raw.filter((_, index) => index % stride === 0);
+    if (sampled.at(-1) !== raw.at(-1)) sampled.push(raw.at(-1));
+    const points = sampled.map(([lon, lat]) => ({ lat: Number(lat), lon: Number(lon) }))
+      .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    const segments = [];
+    let totalKm = 0;
+    for (let index = 1; index < points.length; index++) {
+      const start = points[index - 1];
+      const end = points[index];
+      const lengthKm = haversineKm(start, end);
+      segments.push({ start, end, lengthKm, progressKm: totalKm });
+      totalKm += lengthKm;
+    }
+    if (!segments.length) return { points, segments, totalKm: 0, bounds: null };
+    return {
+      points,
+      segments,
+      totalKm,
+      bounds: points.reduce((bounds, point) => ({
+        minLat: Math.min(bounds.minLat, point.lat),
+        maxLat: Math.max(bounds.maxLat, point.lat),
+        minLon: Math.min(bounds.minLon, point.lon),
+        maxLon: Math.max(bounds.maxLon, point.lon)
+      }), { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity })
+    };
+  }
+
+  function measurePointOnTripRoute(point, shape) {
+    if (!shape?.segments?.length) return { distanceKm: Infinity, progressKm: 0, fraction: 0 };
+    let best = { distanceKm: Infinity, progressKm: 0, fraction: 0 };
+    for (const segment of shape.segments) {
+      const middleLat = (segment.start.lat + segment.end.lat + Number(point.lat)) / 3;
+      const lonScale = 111.32 * Math.cos(middleLat * Math.PI / 180);
+      const dx = (segment.end.lon - segment.start.lon) * lonScale;
+      const dy = (segment.end.lat - segment.start.lat) * 111.32;
+      const px = (Number(point.lon) - segment.start.lon) * lonScale;
+      const py = (Number(point.lat) - segment.start.lat) * 111.32;
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared ? Math.max(0, Math.min(1, (px * dx + py * dy) / lengthSquared)) : 0;
+      const distanceKm = Math.hypot(px - dx * t, py - dy * t);
+      if (distanceKm < best.distanceKm) {
+        const progressKm = segment.progressKm + segment.lengthKm * t;
+        best = { distanceKm, progressKm, fraction: shape.totalKm ? progressKm / shape.totalKm : 0 };
+      }
+    }
+    return best;
+  }
+
+  function pointAtTripRouteFraction(shape, fraction) {
+    if (!shape?.segments?.length || !shape.totalKm) return shape?.points?.[0] || null;
+    const target = Math.max(0, Math.min(1, fraction)) * shape.totalKm;
+    const segment = shape.segments.find(item => target <= item.progressKm + item.lengthKm) || shape.segments.at(-1);
+    const t = segment.lengthKm ? Math.max(0, Math.min(1, (target - segment.progressKm) / segment.lengthKm)) : 0;
+    return {
+      lat: segment.start.lat + (segment.end.lat - segment.start.lat) * t,
+      lon: segment.start.lon + (segment.end.lon - segment.start.lon) * t
+    };
+  }
+
+  function selectTripRouteAttractions(points, shape, durationSeconds) {
+    if (!shape?.segments?.length || shape.totalKm < 25) return [];
+    const targets = durationSeconds >= 4 * 60 * 60 ? [0.26, 0.74] : durationSeconds >= 90 * 60 ? [0.28] : [];
+    const bounds = shape.bounds;
+    const candidates = (Array.isArray(points) ? points : []).flatMap(point => {
+      const lat = Number(point.lat);
+      const lon = Number(point.lon);
+      if (!point.name || !Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+      if (bounds && (lat < bounds.minLat - 0.09 || lat > bounds.maxLat + 0.09 || lon < bounds.minLon - 0.12 || lon > bounds.maxLon + 0.12)) return [];
+      const routePosition = measurePointOnTripRoute({ lat, lon }, shape);
+      if (routePosition.distanceKm > 8 || routePosition.fraction < 0.1 || routePosition.fraction > 0.9) return [];
+      return [{ ...point, lat, lon, routePosition }];
+    });
+    const chosen = [];
+    for (const target of targets) {
+      const pool = candidates.filter(candidate => !chosen.some(item => (item.id && candidate.id && item.id === candidate.id) || (item.name === candidate.name && haversineKm(item, candidate) < 1)))
+        .filter(candidate => Math.abs(candidate.routePosition.fraction - target) <= 0.24)
+        .sort((a, b) => (a.routePosition.distanceKm + Math.abs(a.routePosition.fraction - target) * 12)
+          - (b.routePosition.distanceKm + Math.abs(b.routePosition.fraction - target) * 12));
+      if (pool[0]) chosen.push({ ...pool[0], type: "attraction", dwellMinutes: 60 });
+    }
+    return chosen.sort((a, b) => a.routePosition.progressKm - b.routePosition.progressKm);
+  }
+
+  async function prepareTripScheduleDay(day, attractionPoints, foodPoints) {
+    let route = null;
+    try {
+      route = await fetchTripRoute(day.origin, day.end);
+      day.routeAvailable = true;
+    } catch (error) {
+      day.routeAvailable = false;
+      day.routeMessage = error.message || "道路路線服務暫不可用";
+    }
+    const routeCoordinates = route?.geometry?.coordinates || [
+      [day.origin.lon, day.origin.lat],
+      [day.end.lon, day.end.lat]
+    ];
+    const shape = buildTripRouteShape(routeCoordinates);
+    const baselineDuration = Number(route?.duration) || shape.totalKm / 45 * 3600;
+    day.routeMetrics = route ? { distanceM: route.distance, durationS: route.duration } : null;
+    day.routeShape = shape;
+
+    const attractionStops = selectTripRouteAttractions(attractionPoints, shape, baselineDuration);
+    const lunchCenter = pointAtTripRouteFraction(shape, 0.52) || day.end;
+    const nearbyLunchPlaces = closestDirectoryPoints(foodPoints, lunchCenter, 8, 90);
+    const lunchOptions = recommendFoodsByMeal(nearbyLunchPlaces, lunchCenter).lunch.foods;
+    const lunchChoice = lunchOptions[0] || null;
+    const lunchPoint = lunchChoice ? { lat: lunchChoice.lat, lon: lunchChoice.lon } : lunchCenter;
+    const lunchPosition = measurePointOnTripRoute(lunchPoint, shape);
+    const lunchStop = shape.totalKm > 25 ? {
+      ...(lunchChoice || {}),
+      lat: lunchPoint.lat,
+      lon: lunchPoint.lon,
+      name: lunchChoice?.name || "沿途用餐休息",
+      type: "meal",
+      meal: "午餐",
+      options: lunchOptions,
+      routePosition: lunchPosition,
+      dwellMinutes: 60
+    } : null;
+    const stops = [...attractionStops, ...(lunchStop ? [lunchStop] : [])]
+      .sort((a, b) => a.routePosition.progressKm - b.routePosition.progressKm);
+    const breakfastNearby = closestDirectoryPoints(foodPoints, day.origin, 8, 90);
+    const dinnerNearby = closestDirectoryPoints(foodPoints, day.end, 8, 90);
+    day.breakfastOptions = recommendFoodsByMeal(breakfastNearby, day.origin).breakfast.foods;
+    day.lunchOptions = lunchOptions;
+    day.dinnerOptions = recommendFoodsByMeal(dinnerNearby, day.end).dinner.foods;
+    day.stops = stops;
+    const sequence = [
+      { ...day.origin, label: day.originName, type: "origin" },
+      ...stops,
+      { ...day.end, label: day.endName, type: day.overnightSpot ? "overnight" : day.returnsToStart ? "return" : "destination" }
+    ];
+    day.legs = sequence.slice(1).map((destination, index) => ({
+      origin: sequence[index],
+      destination,
+      roadMetrics: null
+    }));
+    return day;
+  }
+
+  async function loadTripRoadMetrics(items, scheduleDays = []) {
+    const targets = [
+      ...items.flatMap(item => [
       { origin: item.origin, destination: item.spot, target: item, property: "roadMetrics" },
       ...Object.values(item.foods || {}).flatMap(group => group.foods || []).map(food => ({ origin: item.spot, destination: food, target: food, property: "roadMetrics" }))
-    ]);
+      ]),
+      ...scheduleDays.flatMap(day => day.legs.map(leg => ({ origin: leg.origin, destination: leg.destination, target: leg, property: "roadMetrics" })))
+    ];
     const pending = new Map();
     for (const entry of targets) {
       entry.key = tripRoadMetricKey(entry.origin, entry.destination);
@@ -1784,9 +1958,7 @@
       url.searchParams.set("destinations", destinations.join(";"));
       url.searchParams.set("annotations", "distance,duration");
 
-      const waitMs = Math.max(0, 1100 - (Date.now() - lastTripRouteRequestAt));
-      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-      lastTripRouteRequestAt = Date.now();
+      await waitForTripRouteService();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
       try {
@@ -1810,6 +1982,93 @@
       }
     }
     return true;
+  }
+
+  function tripCountyMentions(text) {
+    const normalized = normalizeSearchText(text);
+    const shortNameCounts = new Map();
+    for (const boundary of countyBoundaries) shortNameCounts.set(boundary.shortName, (shortNameCounts.get(boundary.shortName) || 0) + 1);
+    const aliases = countyBoundaries.flatMap(boundary => [
+      { alias: boundary.normalizedName, boundary },
+      ...(shortNameCounts.get(boundary.shortName) === 1 ? [{ alias: boundary.shortName, boundary }] : [])
+    ]).filter(item => item.alias).sort((a, b) => b.alias.length - a.alias.length);
+    const candidates = [];
+    for (const item of aliases) {
+      let position = normalized.indexOf(item.alias);
+      while (position >= 0) {
+        candidates.push({ position, end: position + item.alias.length, boundary: item.boundary });
+        position = normalized.indexOf(item.alias, position + item.alias.length);
+      }
+    }
+    candidates.sort((a, b) => a.position - b.position || b.end - a.end);
+    const mentions = [];
+    for (const candidate of candidates) {
+      if (mentions.some(item => candidate.position < item.end && candidate.end > item.position)) continue;
+      mentions.push(candidate);
+    }
+    return mentions.sort((a, b) => a.position - b.position);
+  }
+
+  function parseTripRouteRequest(text, days) {
+    const value = String(text || "");
+    const markers = [...value.matchAll(/第\s*(\d+|[一二兩三四五六七八九十]{1,3})\s*天/gu)]
+      .map(match => ({ day: chineseNumber(match[1]), index: match.index }));
+    if (markers.length < 2) return null;
+
+    const requestedDays = new Map();
+    let originBoundary = null;
+    let previousDestination = null;
+    for (let index = 0; index < markers.length; index++) {
+      const marker = markers[index];
+      if (marker.day < 1 || marker.day > days) continue;
+      const end = markers[index + 1]?.index ?? value.length;
+      const segment = value.slice(marker.index, end);
+      const mentions = tripCountyMentions(segment);
+      const returns = /返回|回程|返程|回家|回到起點|回到出發地/u.test(segment);
+      let destinationBoundary = null;
+      let returnsToStart = false;
+
+      if (marker.day === 1 && mentions.length >= 2) {
+        originBoundary = mentions[0].boundary;
+        destinationBoundary = mentions.at(-1).boundary;
+      } else if (returns) {
+        const lastMention = mentions.at(-1)?.boundary || null;
+        if (lastMention && originBoundary && lastMention.name === originBoundary.name) returnsToStart = true;
+        else if (lastMention) destinationBoundary = lastMention;
+        else returnsToStart = true;
+      } else if (mentions.length) {
+        destinationBoundary = mentions.at(-1).boundary;
+        if (marker.day === 1 && /出發|起程|起點/u.test(segment) && !/到|前往|抵達/u.test(segment)) {
+          originBoundary = destinationBoundary;
+          destinationBoundary = null;
+        }
+      }
+
+      if (destinationBoundary) previousDestination = destinationBoundary;
+      requestedDays.set(marker.day, { day: marker.day, destinationBoundary, returnsToStart, segment });
+    }
+
+    if (!requestedDays.size || ![...requestedDays.values()].some(item => item.destinationBoundary || item.returnsToStart)) return null;
+    const plannedDays = [];
+    for (let day = 1; day <= days; day++) {
+      const requested = requestedDays.get(day);
+      if (requested) plannedDays.push(requested);
+      else if (previousDestination) plannedDays.push({ day, destinationBoundary: previousDestination, returnsToStart: false, segment: "" });
+      else plannedDays.push({ day, destinationBoundary: null, returnsToStart: false, segment: "" });
+    }
+
+    const nightsMatch = value.match(/(\d+|[一二兩三四五六七八九十]{1,3})\s*夜/u);
+    const nights = nightsMatch ? Math.max(0, Math.min(days - 1, chineseNumber(nightsMatch[1]))) : Math.max(0, days - 1);
+    const timeMatch = value.match(/(?:上午|早上|下午|晚上)?\s*(\d{1,2})[:：](\d{2})\s*出發/u);
+    let departureMinute = 8 * 60;
+    if (timeMatch) {
+      let hour = Number(timeMatch[1]);
+      const minute = Number(timeMatch[2]);
+      if (/下午|晚上/u.test(timeMatch[0]) && hour < 12) hour += 12;
+      if (/上午|早上/u.test(timeMatch[0]) && hour === 12) hour = 0;
+      if (hour <= 23 && minute <= 59) departureMinute = hour * 60 + minute;
+    }
+    return { originBoundary, nights, departureMinute, days: plannedDays };
   }
 
   function parseTripStartCoordinates(query) {
@@ -1872,16 +2131,18 @@
     }
   }
 
-  async function planTrip(manualStart = null) {
+  async function planTrip(manualStart = null, routeRequest = null, resolvedRouteDays = null) {
     const planSequence = ++tripPlanSequence;
     parseRequirementsFromText();
     const days = Math.max(1, Math.min(14, Number($("#daysInput").value) || 3));
     const maxKm = Number($("#maxKm").value) || 160;
     const preferences = $$("input[name='pref']:checked").map(input => input.value);
+    const nights = routeRequest ? routeRequest.nights : days;
+    $("#routeSchedule").innerHTML = routeRequest ? `<p class="plan-progress">正在安排途中景點、用餐與道路時間…</p>` : "";
     const startChoice = $("#startSpot").value;
     let current;
     let startLabel;
-    const startingSpot = manualStart?.spotId ? getSpot(manualStart.spotId) : startChoice === "current" ? null : getSpot(startChoice);
+    const startingSpot = manualStart ? (manualStart.spotId ? getSpot(manualStart.spotId) : null) : startChoice === "current" ? null : getSpot(startChoice);
     if (manualStart) {
       current = { lat: manualStart.lat, lon: manualStart.lon };
       startLabel = manualStart.label;
@@ -1902,26 +2163,66 @@
     let routeOrigin = { ...current };
     let routeOriginName = startLabel;
     let exceeded = false;
-    for (let day = 1; day <= days; day++) {
-      const ranked = [...unplanned].map(id => getSpot(id)).filter(Boolean).map(spot => ({ spot, distance: haversineKm(current, spot), hits: preferenceHits(spot, preferences) }));
-      if (!ranked.length) break;
-      const within = ranked.filter(item => item.distance <= maxKm);
-      const pool = within.length ? within : ranked;
-      if (!within.length) exceeded = true;
-      pool.sort((a, b) => {
-        const aScore = a.distance - Math.min(a.hits.length, 2) * 24;
-        const bScore = b.distance - Math.min(b.hits.length, 2) * 24;
-        return aScore - bScore;
-      });
-      const choice = pool[0];
-      itinerary.push({ day, spot: choice.spot, distance: choice.distance, hits: choice.hits, origin: routeOrigin, originName: routeOriginName, exceeded: choice.distance > maxKm });
-      unplanned.delete(choice.spot.id);
-      current = { lat: Number(choice.spot.lat), lon: Number(choice.spot.lon) };
-      routeOrigin = { ...current };
-      routeOriginName = choice.spot.name;
+    if (routeRequest && resolvedRouteDays?.length) {
+      const usedNightSpots = new Set(startingSpot ? [startingSpot.id] : []);
+      for (const routeDay of resolvedRouteDays) {
+        routeDay.origin = { ...routeOrigin };
+        routeDay.originName = routeOriginName;
+        routeDay.departureMinute = routeRequest.departureMinute;
+        routeDay.maxKm = maxKm;
+        if (routeDay.day <= nights) {
+          const choice = spots.filter(spot => spot.overnightEligible !== false && !usedNightSpots.has(spot.id))
+            .map(spot => ({ spot, distanceKm: haversineKm(routeDay.destinationPoint, spot) }))
+            .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+          if (choice) {
+            const end = { lat: Number(choice.spot.lat), lon: Number(choice.spot.lon) };
+            const distance = haversineKm(routeDay.origin, end);
+            routeDay.end = end;
+            routeDay.endName = choice.spot.name;
+            routeDay.overnightSpot = choice.spot;
+            routeDay.destinationDistanceKm = choice.distanceKm;
+            itinerary.push({ day: routeDay.day, spot: choice.spot, distance, hits: preferenceHits(choice.spot, preferences), origin: routeDay.origin, originName: routeOriginName, exceeded: distance > maxKm });
+            usedNightSpots.add(choice.spot.id);
+            routeOrigin = end;
+            routeOriginName = choice.spot.name;
+          } else {
+            routeDay.end = { ...routeDay.destinationPoint };
+            routeDay.endName = routeDay.destinationName;
+            routeDay.noOvernightSpot = true;
+            routeOrigin = { ...routeDay.end };
+            routeOriginName = routeDay.endName;
+          }
+        } else {
+          routeDay.end = { ...routeDay.destinationPoint };
+          routeDay.endName = routeDay.returnsToStart ? `返回${startLabel}` : routeDay.destinationName;
+          routeOrigin = { ...routeDay.end };
+          routeOriginName = routeDay.endName;
+        }
+        routeDay.exceeded = haversineKm(routeDay.origin, routeDay.end) > maxKm;
+        if (routeDay.exceeded) exceeded = true;
+      }
+    } else {
+      for (let day = 1; day <= days; day++) {
+        const ranked = [...unplanned].map(id => getSpot(id)).filter(Boolean).map(spot => ({ spot, distance: haversineKm(current, spot), hits: preferenceHits(spot, preferences) }));
+        if (!ranked.length) break;
+        const within = ranked.filter(item => item.distance <= maxKm);
+        const pool = within.length ? within : ranked;
+        if (!within.length) exceeded = true;
+        pool.sort((a, b) => {
+          const aScore = a.distance - Math.min(a.hits.length, 2) * 24;
+          const bScore = b.distance - Math.min(b.hits.length, 2) * 24;
+          return aScore - bScore;
+        });
+        const choice = pool[0];
+        itinerary.push({ day, spot: choice.spot, distance: choice.distance, hits: choice.hits, origin: routeOrigin, originName: routeOriginName, exceeded: choice.distance > maxKm });
+        unplanned.delete(choice.spot.id);
+        current = { lat: Number(choice.spot.lat), lon: Number(choice.spot.lon) };
+        routeOrigin = { ...current };
+        routeOriginName = choice.spot.name;
+      }
     }
-    const details = { days, maxKm, preferences, startLabel, exceeded, needs: $("#needsInput").value.trim() };
-    if (!itinerary.length) {
+    const details = { days, nights, destinationPlan: Boolean(routeRequest), maxKm, preferences, startLabel, exceeded, needs: $("#needsInput").value.trim() };
+    if (!itinerary.length && !routeRequest) {
       renderItinerary(itinerary, details);
       return;
     }
@@ -1944,22 +2245,102 @@
       item.attractions = closestDirectoryPoints(attractionPoints, item.spot, 25, 5);
     }
     const directoryError = foodResult.status !== "fulfilled" || attractionResult.status !== "fulfilled";
+    const scheduleDays = [];
+    if (routeRequest && resolvedRouteDays) {
+      for (const day of resolvedRouteDays) {
+        scheduleDays.push(await prepareTripScheduleDay(day, attractionPoints, foodPoints));
+      }
+    }
+    if (planSequence !== tripPlanSequence) return;
+    if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: "loading" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: "loading" });
 
-    let routeError = false;
+    let routeError = scheduleDays.some(day => !day.routeAvailable);
     try {
-      await loadTripRoadMetrics(itinerary);
+      await loadTripRoadMetrics(itinerary, scheduleDays);
     } catch {
       routeError = true;
     }
     if (planSequence !== tripPlanSequence) return;
+    if (scheduleDays.length) renderTripSchedule(scheduleDays, { routeStatus: routeError ? "unavailable" : "ready" });
     renderItinerary(itinerary, details, { directoryError, routeStatus: routeError ? "unavailable" : "ready" });
+  }
+
+  function formatTripClock(minutes) {
+    const wrapped = ((Math.round(minutes) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+  }
+
+  function tripFoodOptionsMarkup(items, center, query) {
+    if (items?.length) {
+      return items.map((food, index) => {
+        const url = googleSearchUrl(food.name, food.lat, food.lon, "near");
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)} ↗</a>`;
+      }).join("　");
+    }
+    const url = googleSearchUrl(query, center.lat, center.lon, "near");
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">用 Google 地圖搜尋附近店家 ↗</a>`;
+  }
+
+  function renderTripSchedule(days, options = {}) {
+    const root = $("#routeSchedule");
+    if (!days?.length) {
+      root.innerHTML = "";
+      return;
+    }
+    const cards = days.map(day => {
+      const rows = [];
+      const breakfastMinute = day.departureMinute - 60;
+      rows.push(`<tr><td>${formatTripClock(breakfastMinute)}</td><th>早餐（${escapeHtml(day.originName)}附近）</th><td>出發前</td><td>—</td><td>約 45 分鐘</td><td>${tripFoodOptionsMarkup(day.breakfastOptions, day.origin, "早餐")}</td></tr>`);
+      rows.push(`<tr class="main-route-row"><td>${formatTripClock(day.departureMinute)}</td><th>出發：${escapeHtml(day.originName)}</th><td>—</td><td>—</td><td>—</td><td>依道路狀況出發</td></tr>`);
+
+      let clockMinute = day.departureMinute;
+      let clockKnown = true;
+      for (const leg of day.legs || []) {
+        const metric = leg.roadMetrics;
+        if (metric) clockMinute += metric.durationS / 60;
+        else clockKnown = false;
+        const destination = leg.destination;
+        const time = options.routeStatus === "loading" ? "計算中…" : clockKnown ? formatTripClock(clockMinute) : "待查";
+        let title = destination.type === "attraction" ? `景點：${destination.name}`
+          : destination.type === "meal" ? `${destination.meal}：${destination.name}`
+            : destination.type === "overnight" ? `泊點：${destination.label}`
+              : destination.type === "return" ? `返抵起點：${destination.label}`
+                : `抵達：${destination.label}`;
+        let stop = destination.dwellMinutes ? `約 ${destination.dwellMinutes} 分鐘` : destination.type === "overnight" ? "過夜" : "—";
+        let details = `<a href="${escapeHtml(mapsDirectionsUrl(leg.origin, destination))}" target="_blank" rel="noopener">本段導航 ↗</a>`;
+        if (destination.type === "attraction") {
+          const url = googleSearchUrl(destination.name, destination.lat, destination.lon, "near");
+          details += `　<a href="${escapeHtml(url)}" target="_blank" rel="noopener">景點資訊 ↗</a>`;
+          details += `<small>${escapeHtml(destination.category || "沿途景點")} · 預留停留 1 小時</small>`;
+        } else if (destination.type === "meal") {
+          details += `<small>${tripFoodOptionsMarkup(destination.options, destination, "餐廳")}</small>`;
+        } else if (destination.type === "overnight") {
+          details += `<small>目的地：${escapeHtml(day.destinationName)}${day.destinationDistanceKm > 2 ? ` · 泊點距目的地約 ${day.destinationDistanceKm.toFixed(1)} 公里（直線）` : ""}</small>`;
+        }
+        rows.push(`<tr><td>${time}</td><th>${escapeHtml(title)}</th><td>${metric ? formatDriveDistance(metric.distanceM) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${metric ? formatDriveDuration(metric.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td>${stop}</td><td>${details}</td></tr>`);
+        if (destination.dwellMinutes && clockKnown) clockMinute += destination.dwellMinutes;
+      }
+
+      if (day.overnightSpot) {
+        const dinnerTime = clockKnown ? formatTripClock(Math.max(clockMinute, 18 * 60)) : "抵達後";
+        rows.push(`<tr><td>${dinnerTime}</td><th>晚餐（${escapeHtml(day.endName)}附近）</th><td>泊點附近</td><td>—</td><td>約 1 小時</td><td>${tripFoodOptionsMarkup(day.dinnerOptions, day.end, "晚餐")}</td></tr>`);
+      }
+      const metrics = (day.legs || []).map(leg => leg.roadMetrics).filter(Boolean);
+      const totalDistance = metrics.length === day.legs.length && metrics.length ? formatDriveDistance(metrics.reduce((sum, item) => sum + item.distanceM, 0)) : day.routeMetrics ? `${formatDriveDistance(day.routeMetrics.distanceM)}（未含停留繞路）` : "道路資料暫不可用";
+      const totalDuration = metrics.length === day.legs.length && metrics.length ? formatDriveDuration(metrics.reduce((sum, item) => sum + item.durationS, 0)) : day.routeMetrics ? `${formatDriveDuration(day.routeMetrics.durationS)}（未含停留繞路）` : "時間待查";
+      const warning = day.exceeded ? `<p class="plan-warning">本日目的地超過設定的 ${day.maxKm || 160} 公里直線距離上限，仍依你描述的目的地安排。</p>` : "";
+      const routeNotice = !day.routeAvailable ? `<p class="plan-warning">道路路線暫時無法取得；沿途點位以直線廊道估算，行車時間與里程請以導航確認。</p>` : "";
+      return `<article class="route-day-card"><header><strong>第 ${day.day} 天：${escapeHtml(day.originName)} → ${escapeHtml(day.destinationName)}</strong><span>預估開車 ${totalDistance} · ${totalDuration}</span></header>${warning}${routeNotice}<div class="day-route-table-wrap"><table class="day-route-table trip-schedule-table" aria-label="第 ${day.day} 天預計行程時間與里程"><thead><tr><th>預計時間</th><th>停留點／安排</th><th>本段里程</th><th>行車時間</th><th>停留時間</th><th>導航／推薦</th></tr></thead><tbody>${rows.join("")}</tbody></table></div></article>`;
+    }).join("");
+    const overview = days.map(day => `第 ${day.day} 天由 ${day.originName} 前往${day.destinationName}${day.overnightSpot ? `，夜宿${day.endName}` : day.returnsToStart ? "，行程返回起點" : ""}`).join("；");
+    root.innerHTML = `<section class="trip-schedule"><div class="section-heading"><div><h2>每日路線與停留時間表</h2><span>依旅程描述安排：${escapeHtml(overview)}。每天列出沿途景點、用餐與停留點。</span></div></div>${cards}<p class="form-disclaimer">行車里程與時間依 OpenStreetMap 道路資料估算，不含即時路況。景點與店家營業狀況請出發前確認。</p></section>`;
   }
 
   function renderItinerary(items, details, options = {}) {
     const root = $("#itinerary");
     if (!items.length) {
-      root.innerHTML = `<div class="empty-state"><strong>目前沒有可安排的泊點</strong><p>調整起點或需求後再試一次。</p></div>`;
+      root.innerHTML = details.destinationPlan ? "" : `<div class="empty-state"><strong>目前沒有可安排的泊點</strong><p>調整起點或需求後再試一次。</p></div>`;
       return;
     }
     const prefLabels = { sea: "海邊／海線", mountain: "山區／森林", spring: "溫泉", temple: "廟宇", service: "服務區／休息站" };
@@ -1999,7 +2380,8 @@
       const foodTable = `<div class="day-route-table-wrap"><table class="day-route-table" aria-label="第 ${item.day} 天行程里程與三餐推薦美食"><thead><tr><th>路段／美食</th><th>直線距離</th><th>道路里程</th><th>行車時間</th><th>導航</th></tr></thead><tbody><tr class="main-route-row"><th>第 ${item.day} 天：${escapeHtml(item.originName)} → ${escapeHtml(item.spot.name)}</th><td>${formatDistanceKm(item.distance)}</td><td>${item.roadMetrics ? formatDriveDistance(item.roadMetrics.distanceM) : routeLabel(null)}</td><td>${item.roadMetrics ? formatDriveDuration(item.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${mainRouteLink}" target="_blank" rel="noopener">導航 ↗</a></td></tr>${foodRows}</tbody></table></div>`;
       return `<article class="day-card"><div class="day-number">DAY<b>${item.day}</b></div><div class="day-main"><div class="day-heading"><div><h3>${escapeHtml(item.spot.name)}</h3><p>由 ${escapeHtml(item.originName)} 出發 · ${Number(item.spot.lat).toFixed(5)}, ${Number(item.spot.lon).toFixed(5)}</p></div><span class="day-distance">${routeLabel(item.roadMetrics)}<small>直線 ${item.distance.toFixed(1)} 公里</small></span></div><div class="spot-badges">${hits}</div>${warning}<div class="day-actions"><a href="${mainRouteLink}" target="_blank" rel="noopener">Google 導航 ↗</a><button type="button" data-action="food" data-id="${escapeHtml(item.spot.id)}">附近美食</button><button type="button" data-action="attractions" data-id="${escapeHtml(item.spot.id)}">附近景點</button><button type="button" data-action="details" data-id="${escapeHtml(item.spot.id)}">泊點資訊</button></div><section class="day-plan-section"><h4>備援泊點（最近三個）</h4><ol class="backup-list">${backupRows}</ol></section><section class="day-plan-section"><h4>行程里程與三餐推薦</h4>${foodTable}</section><section class="day-plan-section"><h4>附近景點</h4><ul class="nearby-attraction-list">${attractionRows}</ul></section></div></article>`;
     }).join("");
-    const omitted = items.length < details.days ? `<p class="plan-warning">找到 ${items.length} 個不重複泊點，少於需求的 ${details.days} 天；可放寬距離，或改選其他起點。</p>` : "";
+    const plannedNights = details.destinationPlan ? details.nights : details.days;
+    const omitted = items.length < plannedNights ? `<p class="plan-warning">找到 ${items.length} 個不重複泊點，少於需求的 ${plannedNights} 夜；可更改目的地或起點。</p>` : "";
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
     const loadingDirectory = options.loadingData ? `<p class="plan-progress">正在載入推薦美食與附近景點…</p>` : "";
     const directoryNotice = options.directoryError ? `<p class="plan-warning">部分官方美食或景點目錄暫時無法載入，其他行程資訊仍可查看。</p>` : "";
@@ -2007,7 +2389,8 @@
       ? `<p class="plan-progress">正在計算行車里程與時間…</p>`
       : options.routeStatus === "unavailable" ? `<p class="plan-warning">道路距離服務暫不可用；可開啟導航查看即時路線與時間。行車資料由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路網估算，不含即時路況。</p>`
         : options.routeStatus === "ready" ? `<p class="form-disclaimer">行車里程與時間由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路資料估算，不含即時路況；泊點與景點直線距離為座標計算。出發前請用導航確認路況、開放狀態及車泊規定。</p>` : "";
-    root.innerHTML = `<div class="trip-summary"><strong>${details.days} 天車宿建議</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${loadingDirectory}${directoryNotice}${routeNotice}${dayCards}`;
+    const tripTitle = details.destinationPlan ? `${details.days} 天 ${details.nights} 夜行程建議` : `${details.days} 天車宿建議`;
+    root.innerHTML = `<div class="trip-summary"><strong>${tripTitle}</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${loadingDirectory}${directoryNotice}${routeNotice}${dayCards}`;
   }
 
   function parseCsv(text) {
@@ -2268,26 +2651,57 @@
       event.preventDefault();
       parseRequirementsFromText();
       const startQuery = $("#startLocationInput").value.trim();
+      const routeRequest = parseTripRouteRequest($("#needsInput").value, Number($("#daysInput").value) || 3);
       let manualStart = null;
+      let resolvedRouteDays = null;
       const submitButton = event.currentTarget.querySelector("button[type='submit']");
-      if (startQuery) {
-        submitButton.disabled = true;
-        $("#startLocationStatus").textContent = "正在查詢輸入的起點…";
-        try {
+      try {
+        if (startQuery) {
+          submitButton.disabled = true;
+          $("#startLocationStatus").textContent = "正在查詢輸入的起點…";
           manualStart = await resolveTripStartLocation(startQuery);
           $("#startLocationStatus").textContent = `起點解析為：${manualStart.label}（${manualStart.lat.toFixed(5)}, ${manualStart.lon.toFixed(5)}）`;
-        } catch (error) {
-          $("#startLocationStatus").textContent = error.message;
-          notify(error.message);
-          return;
-        } finally {
-          submitButton.disabled = false;
+        } else if (routeRequest?.originBoundary && $("#startSpot").value === "current") {
+          submitButton.disabled = true;
+          $("#startLocationStatus").textContent = `依旅程描述查詢起點：${routeRequest.originBoundary.shortName}…`;
+          manualStart = await resolveTripStartLocation(routeRequest.originBoundary.shortName);
+          $("#startLocationStatus").textContent = `起點解析為：${manualStart.label}（${manualStart.lat.toFixed(5)}, ${manualStart.lon.toFixed(5)}）`;
         }
+        if (!manualStart && $("#startSpot").value === "current" && !userPosition) {
+          submitButton.disabled = true;
+          await locateUser();
+        }
+        if (routeRequest) {
+          const selectedSpot = $("#startSpot").value === "current" ? null : getSpot($("#startSpot").value);
+          const tripOrigin = manualStart || (selectedSpot
+            ? { lat: Number(selectedSpot.lat), lon: Number(selectedSpot.lon), label: selectedSpot.name }
+            : userPosition ? { ...userPosition, label: "目前位置" } : null);
+          if (!tripOrigin) throw new Error("請先輸入起點、選擇泊點或允許定位，再規劃返程路線。");
+          const destinations = await Promise.all(routeRequest.days.map(async day => {
+            if (day.returnsToStart) return { destinationPoint: { lat: tripOrigin.lat, lon: tripOrigin.lon }, destinationName: tripOrigin.label };
+            if (day.destinationBoundary) {
+              const place = await resolveTripStartLocation(day.destinationBoundary.shortName);
+              return { destinationPoint: { lat: place.lat, lon: place.lon }, destinationName: place.label };
+            }
+            return null;
+          }));
+          let previousDestination = null;
+          resolvedRouteDays = routeRequest.days.map((day, index) => {
+            const destination = destinations[index];
+            if (destination) previousDestination = destination;
+            const resolved = destination || previousDestination;
+            if (!resolved) throw new Error(`第 ${day.day} 天找不到目的地，請在描述中補上縣市或地名。`);
+            return { ...day, ...resolved, returnsToStart: day.returnsToStart || resolved.destinationPoint.lat === tripOrigin.lat && resolved.destinationPoint.lon === tripOrigin.lon };
+          });
+        }
+      } catch (error) {
+        $("#startLocationStatus").textContent = error.message;
+        notify(error.message);
+        return;
+      } finally {
+        submitButton.disabled = false;
       }
-      if (!manualStart && $("#startSpot").value === "current" && !userPosition) {
-        try { await locateUser(); } catch (error) { notify(error.message); return; }
-      }
-      planTrip(manualStart);
+      planTrip(manualStart, routeRequest, resolvedRouteDays);
     });
     $("#foodSpotSelect").addEventListener("change", handleFoodSpotChange);
     $("#foodRadius").addEventListener("change", searchFood);
