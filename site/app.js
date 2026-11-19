@@ -498,6 +498,28 @@
     return countyBoundaries.filter(boundary => query === boundary.normalizedName || query === boundary.shortName);
   }
 
+  function countyFallbackLocation(boundary) {
+    const countySpots = spots.filter(spot => {
+      const lat = Number(spot.lat);
+      const lon = Number(spot.lon);
+      return Number.isFinite(lat) && Number.isFinite(lon) && isInsideGeometry(lon, lat, boundary.geometry);
+    });
+    if (!countySpots.length) return null;
+    const center = {
+      lat: countySpots.reduce((sum, spot) => sum + Number(spot.lat), 0) / countySpots.length,
+      lon: countySpots.reduce((sum, spot) => sum + Number(spot.lon), 0) / countySpots.length
+    };
+    const representative = countySpots
+      .filter(spot => spot.overnightEligible !== false)
+      .sort((a, b) => haversineKm(center, a) - haversineKm(center, b))[0] || countySpots[0];
+    return {
+      lat: Number(representative.lat),
+      lon: Number(representative.lon),
+      label: `${boundary.shortName}（縣內泊點定位）`,
+      spotId: representative.id
+    };
+  }
+
   function drawMapMarkers(filteredSpots = getFilteredSpots(false)) {
     if (!map || !markerLayer) return;
     markerLayer.clearLayers();
@@ -2142,9 +2164,20 @@
       const data = await response.json();
       const features = (data.features || []).filter(item => item?.geometry?.coordinates?.length >= 2);
       const feature = countyBoundary
-        ? features[0]
+        ? features.find(item => {
+          const [candidateLon, candidateLat] = item.geometry.coordinates.map(Number);
+          return Number.isFinite(candidateLon) && Number.isFinite(candidateLat)
+            && isInsideGeometry(candidateLon, candidateLat, countyBoundary.geometry);
+        })
         : features.find(item => [item.properties?.name, item.properties?.street, item.properties?.district, item.properties?.city, item.properties?.county]
           .some(value => value && normalizeSearchText(value) === normalizedQuery)) || features[0];
+      if (!feature && countyBoundary) {
+        const fallback = countyFallbackLocation(countyBoundary);
+        if (fallback) {
+          tripStartLocationCache.set(normalizedQuery, fallback);
+          return fallback;
+        }
+      }
       if (!feature) throw new Error("找不到這個地點，請輸入更完整的地名、地址或座標。");
       const [lon, lat] = feature.geometry.coordinates.map(Number);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("查詢結果沒有有效座標，請改輸入緯度與經度。");
@@ -2216,8 +2249,13 @@
         routeDay.departureMinute = routeRequest.departureMinute;
         routeDay.maxKm = maxKm;
         if (routeDay.day <= nights) {
-          const choice = spots.filter(spot => spot.overnightEligible !== false && !usedNightSpots.has(spot.id))
+          const destinationCounty = routeDay.destinationBoundary || countyBoundaries.find(boundary =>
+            isInsideGeometry(Number(routeDay.destinationPoint.lon), Number(routeDay.destinationPoint.lat), boundary.geometry));
+          const countyName = destinationCounty?.name || countyAtPoint(Number(routeDay.destinationPoint.lon), Number(routeDay.destinationPoint.lat));
+          const choice = spots.filter(spot => spot.overnightEligible !== false && !usedNightSpots.has(spot.id)
+            && (!countyName || normalizeSearchText(spot.county || countyAtPoint(Number(spot.lon), Number(spot.lat))) === normalizeSearchText(countyName)))
             .map(spot => ({ spot, distanceKm: haversineKm(routeDay.destinationPoint, spot) }))
+            .filter(item => item.distanceKm <= 50)
             .sort((a, b) => a.distanceKm - b.distanceKm)[0];
           if (choice) {
             const end = { lat: Number(choice.spot.lat), lon: Number(choice.spot.lon) };
@@ -2393,8 +2431,9 @@
       const totalDistance = metrics.length === day.legs.length && metrics.length ? formatDriveDistance(metrics.reduce((sum, item) => sum + item.distanceM, 0)) : day.routeMetrics ? `${formatDriveDistance(day.routeMetrics.distanceM)}（未含停留繞路）` : "道路資料暫不可用";
       const totalDuration = metrics.length === day.legs.length && metrics.length ? formatDriveDuration(metrics.reduce((sum, item) => sum + item.durationS, 0)) : day.routeMetrics ? `${formatDriveDuration(day.routeMetrics.durationS)}（未含停留繞路）` : "時間待查";
       const warning = day.exceeded ? `<p class="plan-warning">本日目的地超過設定的 ${day.maxKm || 160} 公里直線距離上限，仍依你描述的目的地安排。</p>` : "";
+      const overnightNotice = day.noOvernightSpot ? `<p class="plan-warning">目的地附近 50 公里內沒有找到同縣市的可過夜泊點；已先以目的地作為當日終點，請調整停留點或選擇其他泊點。</p>` : "";
       const routeNotice = !day.routeAvailable ? `<p class="plan-warning">道路路線暫時無法取得；沿途點位以直線廊道估算，行車時間與里程請以導航確認。</p>` : "";
-      return `<article class="route-day-card"><header><strong>第 ${day.day} 天：${escapeHtml(day.originName)} → ${escapeHtml(day.destinationName)}</strong><div class="route-day-tools"><label>出發時間<input type="time" data-trip-departure-time="${day.day}" value="${formatTripClock(day.departureMinute)}"${options.routeStatus === "loading" ? " disabled" : ""}></label><span>預估開車 ${totalDistance} · ${totalDuration}</span></div></header>${warning}${routeNotice}<div class="day-route-table-wrap"><table class="day-route-table trip-schedule-table" aria-label="第 ${day.day} 天預計行程時間與里程"><thead><tr><th>預計時間</th><th>停留點／安排</th><th>本段里程</th><th>行車時間</th><th>停留時間</th><th>導航／推薦</th></tr></thead><tbody>${rows.join("")}</tbody></table></div></article>`;
+      return `<article class="route-day-card"><header><strong>第 ${day.day} 天：${escapeHtml(day.originName)} → ${escapeHtml(day.destinationName)}</strong><div class="route-day-tools"><label>出發時間<input type="time" data-trip-departure-time="${day.day}" value="${formatTripClock(day.departureMinute)}"${options.routeStatus === "loading" ? " disabled" : ""}></label><span>預估開車 ${totalDistance} · ${totalDuration}</span></div></header>${warning}${overnightNotice}${routeNotice}<div class="day-route-table-wrap"><table class="day-route-table trip-schedule-table" aria-label="第 ${day.day} 天預計行程時間與里程"><thead><tr><th>預計時間</th><th>停留點／安排</th><th>本段里程</th><th>行車時間</th><th>停留時間</th><th>導航／推薦</th></tr></thead><tbody>${rows.join("")}</tbody></table></div></article>`;
     }).join("");
     const overview = days.map(day => `第 ${day.day} 天由 ${day.originName} 前往${day.destinationName}${day.overnightSpot ? `，夜宿${day.endName}` : day.returnsToStart ? "，行程返回起點" : ""}`).join("；");
     root.innerHTML = `<section class="trip-schedule"><div class="section-heading"><div><h2>每日路線與停留時間表</h2><span>依旅程描述安排：${escapeHtml(overview)}。可個別修改停留點的名稱、位置與時間，或移動／移除該點；其他安排會保留。</span></div></div>${cards}<p class="form-disclaimer">行車里程與時間依 OpenStreetMap 道路資料估算，不含即時路況。景點與店家營業狀況請出發前確認。</p></section>`;
