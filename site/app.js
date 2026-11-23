@@ -1757,16 +1757,14 @@
 
     const breakfastShop = /早餐店|早餐專賣|早午餐|朝食|brunch|breakfast/u.test(searchable);
     const breakfastFood = /蛋餅|飯糰|豆漿|燒餅|油條|蘿蔔糕|吐司|三明治|漢堡|肉包|包子|饅頭|水煎包|鍋貼|粥|稀飯|小籠包|麵包|蛋堡/u.test(searchable);
+    const breakfastSavory = /麵|粥|稀飯|餃|包子|小吃店|飯糰/u.test(searchable);
     const savoryMeal = /餐廳|小吃|麵|飯|米粉|米線|餃|燒肉|烤肉|火鍋|海鮮|牛排|便當|排骨|肉圓|滷味|客家|麵線|肉羹|燒臘|食堂|食坊|料理|餐坊|餐館|咖哩/u.test(searchable);
 
     if (meal.key === "breakfast") {
       if (breakfastShop) return { score: 4, label: "早餐店／早午餐" };
       if (breakfastFood) return { score: 3, label: "常見早餐餐點" };
-      if (savoryMeal) return { score: 1, label: "一般餐食，早餐供應未確認" };
-      if (/restaurant|餐廳|fast[_ -]?food|速食|food[_ -]?court|美食街/u.test(searchable)) {
-        return { score: 0, label: "一般餐廳，早餐供應未確認" };
-      }
-      if (String(food.id || "").startsWith("Restaurant_")) return { score: -1, label: "餐飲店家，未標示早餐品項" };
+      if (/海鮮|活魚|牛排|燒肉|燒烤|火鍋|餐酒|酒莊|酒吧|熱炒|漁坊|合菜|宴會|飯店/u.test(searchable)) return null;
+      if (breakfastSavory) return { score: 1, label: "常見餐食，早餐供應未確認" };
       return null;
     }
     if (meal.key === "dinner" && /早餐專賣|早餐店/u.test(searchable)) return null;
