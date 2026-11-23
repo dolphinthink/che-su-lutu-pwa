@@ -1766,6 +1766,7 @@
       if (/restaurant|餐廳|fast[_ -]?food|速食|food[_ -]?court|美食街/u.test(searchable)) {
         return { score: 0, label: "一般餐廳，早餐供應未確認" };
       }
+      if (String(food.id || "").startsWith("Restaurant_")) return { score: -1, label: "餐飲店家，未標示早餐品項" };
       return null;
     }
     if (meal.key === "dinner" && /早餐專賣|早餐店/u.test(searchable)) return null;
@@ -1775,7 +1776,8 @@
     return { score: 0, label: "餐點類型未確認" };
   }
 
-  function recommendFoodsByMeal(points, center, requestedMinutes = {}) {
+  function recommendFoodsByMeal(points, center, requestedMinutes = {}, options = {}) {
+    const strictOpeningHours = Boolean(options.strictOpeningHours);
     const meals = [
       { key: "breakfast", label: "早餐", defaultMinute: 7 * 60, durationMinutes: 45 },
       { key: "lunch", label: "午餐", defaultMinute: 12 * 60, durationMinutes: 60 },
@@ -1794,10 +1796,11 @@
           tripMealAvailabilityCache.set(cacheKey, mealAvailability(food.opening, { ...meal, minute }));
         }
         return { ...food, ...fit, mealSuitabilityLabel: fit.label, mealAvailability: tripMealAvailabilityCache.get(cacheKey), mealTime: formatTripClock(minute) };
-      }).filter(food => food && food.mealAvailability !== "closed")
+      }).filter(food => food && (!strictOpeningHours || food.mealAvailability !== "closed"))
         .sort((a, b) => {
           if (a.score !== b.score) return b.score - a.score;
-          if (a.mealAvailability !== b.mealAvailability) return a.mealAvailability === "open" ? -1 : 1;
+          const availabilityRank = { open: 0, unknown: 1, closed: 2 };
+          if (a.mealAvailability !== b.mealAvailability) return availabilityRank[a.mealAvailability] - availabilityRank[b.mealAvailability];
           const aUsed = used.has(String(a.id || stableId(a.lat, a.lon)));
           const bUsed = used.has(String(b.id || stableId(b.lat, b.lon)));
           if (aUsed !== bUsed) return aUsed ? 1 : -1;
@@ -1830,9 +1833,9 @@
     const lunchStop = (day.legs || []).find(leg => leg.destination?.type === "meal" && /午餐/u.test(leg.destination.meal || ""));
     const lunchCenter = lunchStop?.destination || pointAtTripRouteFraction(day.routeShape, 0.52) || day.end;
     const lunchNearby = closestDirectoryPoints(foodPoints, lunchCenter, 8, 90);
-    day.breakfastOptions = recommendFoodsByMeal(breakfastNearby, day.origin, minutes).breakfast.foods;
-    day.lunchOptions = recommendFoodsByMeal(lunchNearby, lunchCenter, minutes).lunch.foods;
-    day.dinnerOptions = recommendFoodsByMeal(dinnerNearby, day.end, minutes).dinner.foods;
+    day.breakfastOptions = recommendFoodsByMeal(breakfastNearby, day.origin, minutes, { strictOpeningHours: true }).breakfast.foods;
+    day.lunchOptions = recommendFoodsByMeal(lunchNearby, lunchCenter, minutes, { strictOpeningHours: true }).lunch.foods;
+    day.dinnerOptions = recommendFoodsByMeal(dinnerNearby, day.end, minutes, { strictOpeningHours: true }).dinner.foods;
     if (lunchStop) lunchStop.destination.options = day.lunchOptions;
   }
 
@@ -1989,7 +1992,7 @@
     let lunchPoint = lunchCenter;
     let lunchPosition = measurePointOnTripRoute(lunchCenter, shape);
     for (let attempt = 0; attempt < 2; attempt++) {
-      lunchOptions = recommendFoodsByMeal(nearbyLunchPlaces, lunchCenter, { lunch: lunchMinute }).lunch.foods;
+      lunchOptions = recommendFoodsByMeal(nearbyLunchPlaces, lunchCenter, { lunch: lunchMinute }, { strictOpeningHours: true }).lunch.foods;
       lunchChoice = lunchOptions[0] || null;
       lunchPoint = lunchChoice ? { lat: lunchChoice.lat, lon: lunchChoice.lon } : lunchCenter;
       lunchPosition = measurePointOnTripRoute(lunchPoint, shape);
@@ -2630,7 +2633,8 @@
     day.dinnerOptions = recommendFoodsByMeal(
       closestDirectoryPoints(activeTripFoodPoints, spot, 8, 90),
       spot,
-      tripScheduleMealMinutes(day)
+      tripScheduleMealMinutes(day),
+      { strictOpeningHours: true }
     ).dinner.foods;
     const destinations = (day.legs || []).map(leg => leg.destination);
     const finalDestination = destinations.at(-1);
@@ -2648,7 +2652,8 @@
       nextDay.breakfastOptions = recommendFoodsByMeal(
         closestDirectoryPoints(activeTripFoodPoints, nextDay.origin, 8, 90),
         nextDay.origin,
-        { breakfast: nextDay.departureMinute - 60 }
+        { breakfast: nextDay.departureMinute - 60 },
+        { strictOpeningHours: true }
       ).breakfast.foods;
       rebuildTripScheduleLegs(nextDay);
       const nextItem = activeTripItinerary.find(planItem => planItem.day === nextDay.day);
@@ -3097,7 +3102,7 @@
       let updated;
       if (isMeal) {
         const nearby = closestDirectoryPoints(activeTripFoodPoints, place, 5, 50);
-        const options = recommendFoodsByMeal(nearby, place, tripScheduleMealMinutes(day)).lunch.foods;
+        const options = recommendFoodsByMeal(nearby, place, tripScheduleMealMinutes(day), { strictOpeningHours: true }).lunch.foods;
         const choice = options[0] || null;
         const point = choice || place;
         updated = { ...previous, ...(choice || {}), lat: Number(point.lat), lon: Number(point.lon), name: choice && choice.name || "午餐（" + place.label + "）", label: choice && choice.name || place.label, meal: "午餐", options, routePosition: day.routeShape ? measurePointOnTripRoute(point, day.routeShape) : previous.routePosition, dwellMinutes: previous.dwellMinutes };
@@ -3259,18 +3264,16 @@
           const foods = item.foods?.[meal.key]?.foods || [];
           const recommendations = foods.map(food => {
             const address = [food.city, food.town, food.address].filter(Boolean).join(" ");
-            const availability = food.mealAvailability === "open"
-              ? `營業時段涵蓋預計 ${food.mealTime} 用餐，仍請確認當日營業`
-              : `營業時間未提供；請先確認是否適合 ${meal.label}`;
             const opening = String(food.opening || "").trim();
-            const details = [address, food.mealSuitabilityLabel, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
+            const hours = opening ? `登錄營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : "營業時間未提供，請先確認";
+            const details = [address, food.mealSuitabilityLabel, hours].filter(Boolean).join(" · ");
             return `<tr><th><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">${escapeHtml(food.name)}・導航 ↗</a><small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
           }).join("");
           const fallbackUrl = escapeHtml(googleSearchUrl(`${meal.label} 餐廳`, item.spot.lat, item.spot.lon, "near"));
           const missingRows = foods.length < 5
             ? `<tr class="meal-missing-row"><th>${meal.label}推薦不足 5 家</th><td colspan="3">目錄中符合餐別的店家不足；可搜尋確認餐點和營業狀況</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`
             : "";
-          return `<tr class="meal-section-row"><th colspan="5">${meal.label}（預計 ${item.foods?.[meal.key]?.time || "—"}）推薦 ${foods.length}/5</th></tr>${recommendations}${missingRows}`;
+          return `<tr class="meal-section-row"><th colspan="5">${meal.label}推薦 ${foods.length}/5</th></tr>${recommendations}${missingRows}`;
         }).join("");
       const attractionRows = item.attractions === null && options.loadingData
         ? `<li>正在載入景點目錄…</li>`
@@ -3284,7 +3287,7 @@
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
     const loadingDirectory = options.loadingData ? `<p class="plan-progress">正在載入推薦美食與附近景點…</p>` : "";
     const directoryNotice = options.directoryError ? `<p class="plan-warning">部分官方美食或景點目錄暫時無法載入，其他行程資訊仍可查看。</p>` : "";
-    const mealNotice = `<p class="form-disclaimer">三餐清單會依餐點類型篩選，冰品、甜點和飲料店不列入正餐；早餐優先列早餐店、早午餐和常見早餐餐點。營業時段與菜單仍請出發前確認。</p>`;
+    const mealNotice = `<p class="form-disclaimer">三餐清單會依餐點類型篩選，冰品、甜點和飲料店不列入正餐；早餐優先列早餐店、早午餐和常見早餐餐點，其他店家會註明餐點供應尚未確認。營業時段與菜單仍請出發前確認。</p>`;
     const routeNotice = options.routeStatus === "loading" && !options.loadingData
       ? `<p class="plan-progress">正在計算行車里程與時間…</p>`
       : options.routeStatus === "unavailable" ? `<p class="plan-warning">道路距離服務暫不可用；可開啟導航查看即時路線與時間。行車資料由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路網估算，不含即時路況。</p>`
