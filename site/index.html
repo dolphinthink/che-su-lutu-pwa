@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="./styles.css?v=20261119-12">
   <script defer src="./assets/vendor/leaflet.js"></script>
   <script defer src="./assets/vendor/html2canvas.min.js"></script>
-  <script defer src="./app.js?v=20261119-13"></script>
+  <script defer src="./app.js?v=20261123-1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -79,7 +79,7 @@
       <section class="view" id="view-plan" aria-labelledby="planTitle">
         <div class="page-heading"><div><p class="eyebrow">SMART ROUTE</p><h1 id="planTitle">依需求排一趟車宿行程</h1><p class="muted">輸入天數、出發點和想去的地方，查看每日泊點、三個備援泊點、推薦美食、行車里程時間與附近景點。</p></div></div>
         <form class="panel plan-form" id="planForm">
-          <label class="field"><span>描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：三天兩夜，第一天苗栗出發到宜蘭，第二天花蓮，第三天返回；08:00 出發"></textarea><small>可寫每天的目的地、出發時間與偏好；也可輸入海邊、山區、溫泉、廟宇、休息站。</small></label>
+          <label class="field"><span>描述這趟旅行</span><textarea id="needsInput" rows="3" placeholder="例如：宜蘭三天兩夜車泊，第一天直接出發到宜蘭；08:00 出發"></textarea><small>可只寫目的地與天數，系統會安排各晚泊點、沿途景點和美食；也可逐日指定路線。</small></label>
           <div class="form-grid three-cols">
             <label class="field"><span>行程天數</span><select id="daysInput"><option value="1">1 天</option><option value="2">2 天</option><option value="3" selected>3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option><option value="8">8 天</option><option value="9">9 天</option><option value="10">10 天</option><option value="11">11 天</option><option value="12">12 天</option><option value="13">13 天</option><option value="14">14 天</option></select></label>
             <label class="field"><span>選擇泊點或輸入起點</span><select id="startSpot"><option value="current">目前位置（先定位）</option></select><input id="startLocationInput" type="text" maxlength="120" autocomplete="street-address" placeholder="或輸入地名、地址、緯度, 經度" aria-describedby="startLocationStatus"><small id="startLocationStatus" aria-live="polite">輸入地名會由 Photon（OpenStreetMap）查詢座標；也可直接輸入緯度, 經度。</small></label>

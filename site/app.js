@@ -2058,15 +2058,63 @@
     return mentions.sort((a, b) => a.position - b.position);
   }
 
+  function tripOriginBoundaryFromText(text, mentions) {
+    const explicitCues = [...text.matchAll(/(?:出發地|起點|從|由)(?:是|在|為)?/gu)];
+    for (const cue of explicitCues) {
+      const following = mentions.find(item => item.position >= cue.index + cue[0].length);
+      if (following) return following.boundary;
+      const preceding = mentions.filter(item => item.end <= cue.index).at(-1);
+      if (preceding) return preceding.boundary;
+    }
+
+    for (const cue of text.matchAll(/(?:前往|抵達|到達|到)/gu)) {
+      const preceding = mentions.filter(item => item.end <= cue.index).at(-1);
+      const following = mentions.find(item => item.position >= cue.index + cue[0].length);
+      if (preceding && following && preceding.boundary.name !== following.boundary.name) return preceding.boundary;
+    }
+
+    for (const cue of text.matchAll(/出發|起程/gu)) {
+      const preceding = mentions.filter(item => item.end <= cue.index).at(-1);
+      const following = mentions.find(item => item.position >= cue.index + cue[0].length);
+      if (preceding && (!following || preceding.boundary.name !== following.boundary.name)) return preceding.boundary;
+    }
+    return null;
+  }
+
+  function tripDestinationBoundaryFromText(text, mentions) {
+    const cues = [...text.matchAll(/(?:前往|抵達|到達|目的地(?:是|為|在)?|到|去)/gu)];
+    for (const cue of cues.reverse()) {
+      const following = mentions.find(item => item.position >= cue.index + cue[0].length);
+      if (following) return following.boundary;
+    }
+    return mentions.at(-1)?.boundary || null;
+  }
+
   function parseTripRouteRequest(text, days) {
     const value = String(text || "");
-    const markers = [...value.matchAll(/第\s*(\d+|[一二兩三四五六七八九十]{1,3})\s*天/gu)]
+    let markers = [...value.matchAll(/第\s*(\d+|[一二兩三四五六七八九十]{1,3})\s*天/gu)]
       .map(match => ({ day: chineseNumber(match[1]), index: match.index }));
-    if (markers.length < 2) return null;
+    const allMentions = tripCountyMentions(value);
+    if (!markers.length) {
+      const tripContext = /(?:\d+|[一二兩三四五六七八九十]{1,3})\s*(?:天|日|夜)|車泊|車宿|行程|旅程|旅遊|旅行|出發|前往|抵達|到/u.test(value);
+      if (!tripContext || !allMentions.length) return null;
+      markers = [{ day: 1, index: 0 }];
+    } else if (markers.length < 2 && !allMentions.length) {
+      return null;
+    }
 
     const requestedDays = new Map();
-    let originBoundary = null;
-    let previousDestination = null;
+    const firstDayMarker = markers.find(marker => marker.day === 1);
+    const originContextEnd = firstDayMarker
+      ? markers.find(marker => marker.index > firstDayMarker.index)?.index ?? value.length
+      : markers[0]?.index ?? value.length;
+    const originContext = value.slice(0, originContextEnd);
+    let originBoundary = tripOriginBoundaryFromText(originContext, tripCountyMentions(originContext));
+    const firstDayIndex = markers[0]?.index ?? 0;
+    const prelude = value.slice(0, firstDayIndex);
+    const preludeMentions = tripCountyMentions(prelude);
+    const defaultDestinationBoundary = tripDestinationBoundaryFromText(prelude, preludeMentions)
+      || tripDestinationBoundaryFromText(value, allMentions);
     for (let index = 0; index < markers.length; index++) {
       const marker = markers[index];
       if (marker.day < 1 || marker.day > days) continue;
@@ -2087,27 +2135,39 @@
         else returnsToStart = true;
       } else if (mentions.length) {
         destinationBoundary = mentions.at(-1).boundary;
-        if (marker.day === 1 && /出發|起程|起點/u.test(segment) && !/到|前往|抵達/u.test(segment)) {
-          originBoundary = destinationBoundary;
+        if (marker.day === 1 && /出發|起程|起點/u.test(segment) && !/到|前往|抵達|去/u.test(segment)) {
+          originBoundary = originBoundary || destinationBoundary;
           destinationBoundary = null;
         }
+      } else if (marker.day === 1 && defaultDestinationBoundary && !returns) {
+        destinationBoundary = defaultDestinationBoundary;
+      }
+      if (marker.day === 1 && !returnsToStart && !destinationBoundary && defaultDestinationBoundary) {
+        destinationBoundary = defaultDestinationBoundary;
       }
 
-      if (destinationBoundary) previousDestination = destinationBoundary;
       requestedDays.set(marker.day, { day: marker.day, destinationBoundary, returnsToStart, segment });
     }
 
     if (!requestedDays.size || ![...requestedDays.values()].some(item => item.destinationBoundary || item.returnsToStart)) return null;
-    const plannedDays = [];
-    for (let day = 1; day <= days; day++) {
-      const requested = requestedDays.get(day);
-      if (requested) plannedDays.push(requested);
-      else if (previousDestination) plannedDays.push({ day, destinationBoundary: previousDestination, returnsToStart: false, segment: "" });
-      else plannedDays.push({ day, destinationBoundary: null, returnsToStart: false, segment: "" });
-    }
-
     const nightsMatch = value.match(/(\d+|[一二兩三四五六七八九十]{1,3})\s*夜/u);
     const nights = nightsMatch ? Math.max(0, Math.min(days - 1, chineseNumber(nightsMatch[1]))) : Math.max(0, days - 1);
+    const plannedDays = [];
+    let previousDestination = defaultDestinationBoundary;
+    for (let day = 1; day <= days; day++) {
+      const requested = requestedDays.get(day);
+      if (requested?.destinationBoundary) previousDestination = requested.destinationBoundary;
+      if (requested?.returnsToStart) {
+        plannedDays.push(requested);
+      } else if (day === days && day > nights && previousDestination && !requested?.destinationBoundary) {
+        plannedDays.push({ day, destinationBoundary: null, returnsToStart: true, segment: requested?.segment || "" });
+      } else if (requested?.destinationBoundary || previousDestination) {
+        plannedDays.push({ ...requested, day, destinationBoundary: requested?.destinationBoundary || previousDestination, returnsToStart: false, segment: requested?.segment || "" });
+      } else {
+        plannedDays.push({ ...requested, day, destinationBoundary: null, returnsToStart: false, segment: requested?.segment || "" });
+      }
+    }
+
     const timeMatch = value.match(/(?:上午|早上|下午|晚上)?\s*(\d{1,2})[:：](\d{2})\s*出發/u);
     let departureMinute = 8 * 60;
     if (timeMatch) {
