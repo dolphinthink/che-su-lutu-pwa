@@ -141,6 +141,13 @@
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   }
 
+  function bloggerFoodSearchUrl(spot, mealLabel) {
+    const county = spot.county || countyAtPoint(Number(spot.lon), Number(spot.lat));
+    const location = [spot.name, spot.town, county].filter(Boolean).join(" ");
+    const query = `${location} 附近 ${mealLabel} 美食 部落客 部落格 推薦`;
+    return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  }
+
   function googleSpotSearchUrl(spot) {
     const coordinates = `${Number(spot.lat).toFixed(6)},${Number(spot.lon).toFixed(6)}`;
     const county = spot.county || countyAtPoint(Number(spot.lon), Number(spot.lat));
@@ -3261,6 +3268,7 @@
           { key: "dinner", label: "晚餐" }
         ].map(meal => {
           const foods = item.foods?.[meal.key]?.foods || [];
+          const bloggerUrl = escapeHtml(bloggerFoodSearchUrl(item.spot, meal.label));
           const recommendations = foods.map(food => {
             const address = [food.city, food.town, food.address].filter(Boolean).join(" ");
             const opening = String(food.opening || "").trim();
@@ -3272,7 +3280,7 @@
           const missingRows = foods.length < 5
             ? `<tr class="meal-missing-row"><th>${meal.label}推薦不足 5 家</th><td colspan="3">目錄中符合餐別的店家不足；可搜尋確認餐點和營業狀況</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`
             : "";
-          return `<tr class="meal-section-row"><th colspan="5">${meal.label}推薦 ${foods.length}/5</th></tr>${recommendations}${missingRows}`;
+          return `<tr class="meal-section-row"><th colspan="5"><span class="meal-section-heading"><span>${meal.label}推薦 ${foods.length}/5</span><a href="${bloggerUrl}" target="_blank" rel="noopener noreferrer" aria-label="搜尋${escapeHtml(item.spot.name)}附近${meal.label}網路部落客美食">網路部落客美食 ↗</a></span></th></tr>${recommendations}${missingRows}`;
         }).join("");
       const attractionRows = item.attractions === null && options.loadingData
         ? `<li>正在載入景點目錄…</li>`

@@ -51,6 +51,8 @@
 .day-route-table tbody th small{display:block;margin-top:4px;color:var(--muted);font-size:9px;font-weight:400;line-height:1.5}
 .day-route-table .main-route-row{background:#fbfcfa}
 .day-route-table .meal-section-row th{background:#f5f8f5;color:var(--green);font-size:10px}
+.day-route-table .meal-section-heading{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.day-route-table .meal-section-heading a{font-size:9px;font-weight:600}
 .day-route-table .meal-missing-row th{color:var(--muted);font-weight:400}
 .day-route-table tbody tr:last-child th,.day-route-table tbody tr:last-child td{border-bottom:0}
 .nearby-attraction-list li{grid-template-columns:minmax(0,1fr) auto;align-items:start;padding:7px 0;border-bottom:1px solid #edf0ed}
