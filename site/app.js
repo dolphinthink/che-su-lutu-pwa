@@ -1739,32 +1739,70 @@
       if (end <= times[index]) end += 24 * 60;
       intervals.push([times[index], end]);
     }
-    if (!intervals.length) return "unknown";
-    return intervals.some(([start, end]) => start < meal.end && end > meal.start) ? "open" : "closed";
+    if (!intervals.length) return /休息|公休|店休|未營業|歇業/u.test(String(opening || "")) ? "closed" : "unknown";
+    const minute = Number.isFinite(Number(meal.minute)) ? Number(meal.minute) : meal.defaultMinute;
+    const duration = Number(meal.durationMinutes) || 45;
+    const start = ((minute % 1440) + 1440) % 1440;
+    const end = start + duration;
+    return intervals.some(([open, close]) => open <= start && close >= end) ? "open" : "closed";
   }
 
-  function recommendFoodsByMeal(points, center) {
+  function recommendFoodsByMeal(points, center, requestedMinutes = {}) {
     const meals = [
-      { key: "breakfast", label: "早餐", start: 6 * 60, end: 11 * 60 },
-      { key: "lunch", label: "午餐", start: 11 * 60, end: 16 * 60 },
-      { key: "dinner", label: "晚餐", start: 16 * 60, end: 23 * 60 }
+      { key: "breakfast", label: "早餐", defaultMinute: 7 * 60, durationMinutes: 45 },
+      { key: "lunch", label: "午餐", defaultMinute: 12 * 60, durationMinutes: 60 },
+      { key: "dinner", label: "晚餐", defaultMinute: 18 * 60, durationMinutes: 60 }
     ];
     const candidates = closestDirectoryPoints(points, center, 30, Infinity);
     const used = new Set();
     return Object.fromEntries(meals.map(meal => {
+      const requestedMinute = Number(requestedMinutes[meal.key]);
+      const minute = Number.isFinite(requestedMinute) ? requestedMinute : meal.defaultMinute;
       const ranked = candidates.map(food => {
-        const cacheKey = `${food.id || stableId(food.lat, food.lon)}:${meal.key}`;
-        if (!tripMealAvailabilityCache.has(cacheKey)) tripMealAvailabilityCache.set(cacheKey, mealAvailability(food.opening, meal));
-        return { ...food, mealAvailability: tripMealAvailabilityCache.get(cacheKey) };
-      }).filter(food => food.mealAvailability !== "closed" && !used.has(String(food.id || stableId(food.lat, food.lon))))
+        const cacheKey = `${food.id || stableId(food.lat, food.lon)}:${meal.key}:${minute}`;
+        if (!tripMealAvailabilityCache.has(cacheKey)) {
+          tripMealAvailabilityCache.set(cacheKey, mealAvailability(food.opening, { ...meal, minute }));
+        }
+        return { ...food, mealAvailability: tripMealAvailabilityCache.get(cacheKey), mealTime: formatTripClock(minute) };
+      }).filter(food => food.mealAvailability !== "closed")
         .sort((a, b) => {
           if (a.mealAvailability !== b.mealAvailability) return a.mealAvailability === "open" ? -1 : 1;
+          const aUsed = used.has(String(a.id || stableId(a.lat, a.lon)));
+          const bUsed = used.has(String(b.id || stableId(b.lat, b.lon)));
+          if (aUsed !== bUsed) return aUsed ? 1 : -1;
           return a.distanceKm - b.distanceKm;
         })
-        .slice(0, 3);
+        .slice(0, 5);
       for (const food of ranked) used.add(String(food.id || stableId(food.lat, food.lon)));
-      return [meal.key, { label: meal.label, foods: ranked }];
+      return [meal.key, { label: meal.label, time: formatTripClock(minute), foods: ranked }];
     }));
+  }
+
+  function tripScheduleMealMinutes(day) {
+    const legMinutes = (day.legs || []).reduce((total, leg) => total + (Number(leg.roadMetrics?.durationS) || 0) / 60, 0);
+    const routeMinutes = Number(day.routeMetrics?.durationS || day.estimatedRouteDurationS) / 60 || legMinutes;
+    const dwellMinutes = (day.legs || []).reduce((total, leg) => total + (Number(leg.destination?.dwellMinutes) || 0), 0);
+    const lunchStop = (day.legs || []).find(leg => leg.destination?.type === "meal" && /午餐/u.test(leg.destination.meal || ""));
+    const lunchFraction = Number(lunchStop?.destination?.routePosition?.fraction);
+    return {
+      breakfast: day.departureMinute - 60,
+      lunch: day.departureMinute + (Number.isFinite(lunchFraction) ? routeMinutes * lunchFraction : routeMinutes * 0.52),
+      dinner: Math.max(18 * 60, day.departureMinute + routeMinutes + dwellMinutes)
+    };
+  }
+
+  function refreshTripScheduleMealOptions(day, foodPoints = activeTripFoodPoints) {
+    if (!day || !Array.isArray(foodPoints)) return;
+    const minutes = tripScheduleMealMinutes(day);
+    const breakfastNearby = closestDirectoryPoints(foodPoints, day.origin, 8, 90);
+    const dinnerNearby = closestDirectoryPoints(foodPoints, day.end, 8, 90);
+    const lunchStop = (day.legs || []).find(leg => leg.destination?.type === "meal" && /午餐/u.test(leg.destination.meal || ""));
+    const lunchCenter = lunchStop?.destination || pointAtTripRouteFraction(day.routeShape, 0.52) || day.end;
+    const lunchNearby = closestDirectoryPoints(foodPoints, lunchCenter, 8, 90);
+    day.breakfastOptions = recommendFoodsByMeal(breakfastNearby, day.origin, minutes).breakfast.foods;
+    day.lunchOptions = recommendFoodsByMeal(lunchNearby, lunchCenter, minutes).lunch.foods;
+    day.dinnerOptions = recommendFoodsByMeal(dinnerNearby, day.end, minutes).dinner.foods;
+    if (lunchStop) lunchStop.destination.options = day.lunchOptions;
   }
 
   function closestBackupSpots(center, excludedIds) {
@@ -1907,16 +1945,25 @@
     ];
     const shape = buildTripRouteShape(routeCoordinates);
     const baselineDuration = Number(route?.duration) || shape.totalKm / 45 * 3600;
+    day.estimatedRouteDurationS = baselineDuration;
     day.routeMetrics = route ? { distanceM: route.distance, durationS: route.duration } : null;
     day.routeShape = shape;
 
     const attractionStops = selectTripRouteAttractions(attractionPoints, shape, baselineDuration);
     const lunchCenter = pointAtTripRouteFraction(shape, 0.52) || day.end;
     const nearbyLunchPlaces = closestDirectoryPoints(foodPoints, lunchCenter, 8, 90);
-    const lunchOptions = recommendFoodsByMeal(nearbyLunchPlaces, lunchCenter).lunch.foods;
-    const lunchChoice = lunchOptions[0] || null;
-    const lunchPoint = lunchChoice ? { lat: lunchChoice.lat, lon: lunchChoice.lon } : lunchCenter;
-    const lunchPosition = measurePointOnTripRoute(lunchPoint, shape);
+    let lunchMinute = day.departureMinute + baselineDuration / 60 * measurePointOnTripRoute(lunchCenter, shape).fraction;
+    let lunchOptions = [];
+    let lunchChoice = null;
+    let lunchPoint = lunchCenter;
+    let lunchPosition = measurePointOnTripRoute(lunchCenter, shape);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      lunchOptions = recommendFoodsByMeal(nearbyLunchPlaces, lunchCenter, { lunch: lunchMinute }).lunch.foods;
+      lunchChoice = lunchOptions[0] || null;
+      lunchPoint = lunchChoice ? { lat: lunchChoice.lat, lon: lunchChoice.lon } : lunchCenter;
+      lunchPosition = measurePointOnTripRoute(lunchPoint, shape);
+      lunchMinute = day.departureMinute + baselineDuration / 60 * lunchPosition.fraction;
+    }
     const lunchStop = shape.totalKm > 25 ? {
       ...(lunchChoice || {}),
       lat: lunchPoint.lat,
@@ -1930,11 +1977,6 @@
     } : null;
     const stops = [...attractionStops, ...(lunchStop ? [lunchStop] : [])]
       .sort((a, b) => a.routePosition.progressKm - b.routePosition.progressKm);
-    const breakfastNearby = closestDirectoryPoints(foodPoints, day.origin, 8, 90);
-    const dinnerNearby = closestDirectoryPoints(foodPoints, day.end, 8, 90);
-    day.breakfastOptions = recommendFoodsByMeal(breakfastNearby, day.origin).breakfast.foods;
-    day.lunchOptions = lunchOptions;
-    day.dinnerOptions = recommendFoodsByMeal(dinnerNearby, day.end).dinner.foods;
     day.stops = stops;
     const sequence = [
       { ...day.origin, label: day.originName, type: "origin" },
@@ -1946,6 +1988,7 @@
       destination,
       roadMetrics: null
     }));
+    refreshTripScheduleMealOptions(day, foodPoints);
     return day;
   }
 
@@ -2427,7 +2470,8 @@
     if (items?.length) {
       return items.map((food, index) => {
         const url = mapsDirectionsUrl(origin, food);
-        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)}・導航 ↗</a>`;
+        const availability = food.mealAvailability === "unknown" ? "・營業時間待確認" : "・時段符合";
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)}${availability}・導航 ↗</a>`;
       }).join("　");
     }
     const url = googleSearchUrl(query, center.lat, center.lon, "near");
@@ -2553,7 +2597,8 @@
     day.routeMetrics = null;
     day.dinnerOptions = recommendFoodsByMeal(
       closestDirectoryPoints(activeTripFoodPoints, spot, 8, 90),
-      spot
+      spot,
+      tripScheduleMealMinutes(day)
     ).dinner.foods;
     const destinations = (day.legs || []).map(leg => leg.destination);
     const finalDestination = destinations.at(-1);
@@ -2570,7 +2615,8 @@
       nextDay.routeMetrics = null;
       nextDay.breakfastOptions = recommendFoodsByMeal(
         closestDirectoryPoints(activeTripFoodPoints, nextDay.origin, 8, 90),
-        nextDay.origin
+        nextDay.origin,
+        { breakfast: nextDay.departureMinute - 60 }
       ).breakfast.foods;
       rebuildTripScheduleLegs(nextDay);
       const nextItem = activeTripItinerary.find(planItem => planItem.day === nextDay.day);
@@ -2919,6 +2965,7 @@
           ? (/晚|延後|延遲|往後/u.test(text) ? day.departureMinute + duration : /早|提早|提前|往前/u.test(text) ? day.departureMinute - duration : newMinute)
           : newMinute;
         setTripDayDeparture(day, minute);
+        refreshTripScheduleMealOptions(day);
       }
       await refreshTripAfterPartialEdit("已更新出發時間。");
       activeTripConversationContext = null;
@@ -3018,7 +3065,7 @@
       let updated;
       if (isMeal) {
         const nearby = closestDirectoryPoints(activeTripFoodPoints, place, 5, 50);
-        const options = recommendFoodsByMeal(nearby, place).lunch.foods;
+        const options = recommendFoodsByMeal(nearby, place, tripScheduleMealMinutes(day)).lunch.foods;
         const choice = options[0] || null;
         const point = choice || place;
         updated = { ...previous, ...(choice || {}), lat: Number(point.lat), lon: Number(point.lon), name: choice && choice.name || "午餐（" + place.label + "）", label: choice && choice.name || place.label, meal: "午餐", options, routePosition: day.routeShape ? measurePointOnTripRoute(point, day.routeShape) : previous.routePosition, dwellMinutes: previous.dwellMinutes };
@@ -3180,14 +3227,18 @@
           const foods = item.foods?.[meal.key]?.foods || [];
           const recommendations = foods.map(food => {
             const address = [food.city, food.town, food.address].filter(Boolean).join(" ");
-            const availability = food.mealAvailability === "open" ? "目錄時段涵蓋此餐期，請再確認" : "未提供可判讀的營業時段";
+            const availability = food.mealAvailability === "open"
+              ? `營業時段涵蓋預計 ${food.mealTime} 用餐，仍請確認當日營業`
+              : `營業時間未提供；請先確認是否適合 ${meal.label}`;
             const opening = String(food.opening || "").trim();
             const details = [address, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
             return `<tr><th><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">${escapeHtml(food.name)}・導航 ↗</a><small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
           }).join("");
           const fallbackUrl = escapeHtml(googleSearchUrl(`${meal.label} 餐廳`, item.spot.lat, item.spot.lon, "near"));
-          const missingRows = Array.from({ length: Math.max(0, 3 - foods.length) }, (_, index) => `<tr class="meal-missing-row"><th>${meal.label}推薦 ${foods.length + index + 1}</th><td colspan="3">30 公里內沒有更多符合或時段未確認的目錄店家</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`).join("");
-          return `<tr class="meal-section-row"><th colspan="5">${meal.label}推薦 ${foods.length}/3</th></tr>${recommendations}${missingRows}`;
+          const missingRows = foods.length < 5
+            ? `<tr class="meal-missing-row"><th>${meal.label}推薦不足 5 家</th><td colspan="3">沒有更多營業資訊符合預計時段的目錄店家；可搜尋並確認營業時間與菜單</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`
+            : "";
+          return `<tr class="meal-section-row"><th colspan="5">${meal.label}（預計 ${item.foods?.[meal.key]?.time || "—"}）推薦 ${foods.length}/5</th></tr>${recommendations}${missingRows}`;
         }).join("");
       const attractionRows = item.attractions === null && options.loadingData
         ? `<li>正在載入景點目錄…</li>`
@@ -3201,12 +3252,13 @@
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
     const loadingDirectory = options.loadingData ? `<p class="plan-progress">正在載入推薦美食與附近景點…</p>` : "";
     const directoryNotice = options.directoryError ? `<p class="plan-warning">部分官方美食或景點目錄暫時無法載入，其他行程資訊仍可查看。</p>` : "";
+    const mealNotice = `<p class="form-disclaimer">餐飲名單依預計用餐時間和登錄營業時段篩選；營業時間未提供者會標示待確認。目錄未提供菜單，也未指定旅遊日期，請確認當日營業和餐點。</p>`;
     const routeNotice = options.routeStatus === "loading" && !options.loadingData
       ? `<p class="plan-progress">正在計算行車里程與時間…</p>`
       : options.routeStatus === "unavailable" ? `<p class="plan-warning">道路距離服務暫不可用；可開啟導航查看即時路線與時間。行車資料由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路網估算，不含即時路況。</p>`
         : options.routeStatus === "ready" ? `<p class="form-disclaimer">行車里程與時間由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路資料估算，不含即時路況；泊點與景點直線距離為座標計算。出發前請用導航確認路況、開放狀態及車泊規定。</p>` : "";
     const tripTitle = details.destinationPlan ? `${details.days} 天 ${details.nights} 夜行程建議` : `${details.days} 天車宿建議`;
-    root.innerHTML = `<div class="trip-summary"><strong>${tripTitle}</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${loadingDirectory}${directoryNotice}${routeNotice}${dayCards}`;
+    root.innerHTML = `<div class="trip-summary"><strong>${tripTitle}</strong><span>起點：${escapeHtml(details.startLabel)}<br>${needsLine}</span></div>${omitted}${details.exceeded && !omitted ? `<p class="plan-warning">部分日程超過距離上限，請檢查 Google 道路導航里程。</p>` : ""}${loadingDirectory}${directoryNotice}${routeNotice}${mealNotice}${dayCards}`;
   }
 
   function parseCsv(text) {
@@ -3478,6 +3530,7 @@
       const day = activeTripScheduleDays.find(item => item.day === Number(input.dataset.tripDepartureTime));
       if (!match || !day) return;
       day.departureMinute = Number(match[1]) * 60 + Number(match[2]);
+      refreshTripScheduleMealOptions(day);
       renderTripSchedule(activeTripScheduleDays, { routeStatus: activeTripRouteError ? "unavailable" : "ready" });
     });
     $("#mapExpand").addEventListener("click", () => {
