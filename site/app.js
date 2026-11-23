@@ -1765,6 +1765,7 @@
       if (breakfastFood) return { score: 3, label: "常見早餐餐點" };
       if (/海鮮|活魚|牛排|燒肉|燒烤|火鍋|餐酒|酒莊|酒吧|熱炒|漁坊|合菜|宴會|飯店/u.test(searchable)) return null;
       if (breakfastSavory) return { score: 1, label: "常見餐食，早餐供應未確認" };
+      if (String(food.id || "").startsWith("Restaurant_")) return { score: -1, label: "餐飲候選，早餐供應未確認" };
       return null;
     }
     if (meal.key === "dinner" && /早餐專賣|早餐店/u.test(searchable)) return null;
