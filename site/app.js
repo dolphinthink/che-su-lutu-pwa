@@ -1747,6 +1747,34 @@
     return intervals.some(([open, close]) => open <= start && close >= end) ? "open" : "closed";
   }
 
+  function mealFoodFit(food, meal) {
+    const name = String(food.name || "");
+    const category = String(food.category || "");
+    const cuisine = String(food.cuisine || "");
+    const searchable = `${name} ${category} ${cuisine}`.toLocaleLowerCase("zh-Hant");
+    const dessertOrDrink = /冰淇淋|霜淇淋|雪花冰|刨冰|芋冰|冰城|冰店|冰品|麻糬|甜點|甜品|甜湯|蛋糕|甜甜圈|糖果|巧克力專賣|手搖飲|珍珠奶茶|飲料店|茶飲店|果汁店|飲品店|ice[_ -]?cream|dessert|bubble[_ -]?tea/u.test(searchable);
+    if (dessertOrDrink || /^(冰品|冰淇淋|甜點|飲料)$/u.test(category)) return null;
+
+    const breakfastShop = /早餐店|早餐專賣|早午餐|朝食|brunch|breakfast/u.test(searchable);
+    const breakfastFood = /蛋餅|飯糰|豆漿|燒餅|油條|蘿蔔糕|吐司|三明治|漢堡|肉包|包子|饅頭|水煎包|鍋貼|粥|稀飯|小籠包|麵包|蛋堡/u.test(searchable);
+    const savoryMeal = /餐廳|小吃|麵|飯|米粉|米線|餃|燒肉|烤肉|火鍋|海鮮|牛排|便當|排骨|肉圓|滷味|客家|麵線|肉羹|燒臘|食堂|食坊|料理|餐坊|餐館|咖哩/u.test(searchable);
+
+    if (meal.key === "breakfast") {
+      if (breakfastShop) return { score: 4, label: "早餐店／早午餐" };
+      if (breakfastFood) return { score: 3, label: "常見早餐餐點" };
+      if (savoryMeal) return { score: 1, label: "一般餐食，早餐供應未確認" };
+      if (/restaurant|餐廳|fast[_ -]?food|速食|food[_ -]?court|美食街/u.test(searchable)) {
+        return { score: 0, label: "一般餐廳，早餐供應未確認" };
+      }
+      return null;
+    }
+    if (meal.key === "dinner" && /早餐專賣|早餐店/u.test(searchable)) return null;
+    if (savoryMeal || /restaurant|fast[_ -]?food|food[_ -]?court/u.test(searchable)) {
+      return { score: 2, label: "正餐店家" };
+    }
+    return { score: 0, label: "餐點類型未確認" };
+  }
+
   function recommendFoodsByMeal(points, center, requestedMinutes = {}) {
     const meals = [
       { key: "breakfast", label: "早餐", defaultMinute: 7 * 60, durationMinutes: 45 },
@@ -1759,13 +1787,16 @@
       const requestedMinute = Number(requestedMinutes[meal.key]);
       const minute = Number.isFinite(requestedMinute) ? requestedMinute : meal.defaultMinute;
       const ranked = candidates.map(food => {
+        const fit = mealFoodFit(food, meal);
+        if (!fit) return null;
         const cacheKey = `${food.id || stableId(food.lat, food.lon)}:${meal.key}:${minute}`;
         if (!tripMealAvailabilityCache.has(cacheKey)) {
           tripMealAvailabilityCache.set(cacheKey, mealAvailability(food.opening, { ...meal, minute }));
         }
-        return { ...food, mealAvailability: tripMealAvailabilityCache.get(cacheKey), mealTime: formatTripClock(minute) };
-      }).filter(food => food.mealAvailability !== "closed")
+        return { ...food, ...fit, mealSuitabilityLabel: fit.label, mealAvailability: tripMealAvailabilityCache.get(cacheKey), mealTime: formatTripClock(minute) };
+      }).filter(food => food && food.mealAvailability !== "closed")
         .sort((a, b) => {
+          if (a.score !== b.score) return b.score - a.score;
           if (a.mealAvailability !== b.mealAvailability) return a.mealAvailability === "open" ? -1 : 1;
           const aUsed = used.has(String(a.id || stableId(a.lat, a.lon)));
           const bUsed = used.has(String(b.id || stableId(b.lat, b.lon)));
@@ -2470,8 +2501,9 @@
     if (items?.length) {
       return items.map((food, index) => {
         const url = mapsDirectionsUrl(origin, food);
+        const suitability = food.mealSuitabilityLabel ? `・${food.mealSuitabilityLabel}` : "";
         const availability = food.mealAvailability === "unknown" ? "・營業時間待確認" : "・時段符合";
-        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)}${availability}・導航 ↗</a>`;
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${index + 1}. ${escapeHtml(food.name)}${suitability}${availability}・導航 ↗</a>`;
       }).join("　");
     }
     const url = googleSearchUrl(query, center.lat, center.lon, "near");
@@ -3231,12 +3263,12 @@
               ? `營業時段涵蓋預計 ${food.mealTime} 用餐，仍請確認當日營業`
               : `營業時間未提供；請先確認是否適合 ${meal.label}`;
             const opening = String(food.opening || "").trim();
-            const details = [address, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
+            const details = [address, food.mealSuitabilityLabel, availability, opening ? `營業時間：${opening.slice(0, 72)}${opening.length > 72 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
             return `<tr><th><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">${escapeHtml(food.name)}・導航 ↗</a><small>${escapeHtml(details)}</small></th><td>${formatDistanceKm(food.distanceKm)}</td><td>${food.roadMetrics ? formatDriveDistance(food.roadMetrics.distanceM) : routeLabel(null)}</td><td>${food.roadMetrics ? formatDriveDuration(food.roadMetrics.durationS) : options.routeStatus === "loading" ? "計算中…" : "—"}</td><td><a href="${escapeHtml(mapsDirectionsUrl(item.spot, food))}" target="_blank" rel="noopener">導航 ↗</a></td></tr>`;
           }).join("");
           const fallbackUrl = escapeHtml(googleSearchUrl(`${meal.label} 餐廳`, item.spot.lat, item.spot.lon, "near"));
           const missingRows = foods.length < 5
-            ? `<tr class="meal-missing-row"><th>${meal.label}推薦不足 5 家</th><td colspan="3">沒有更多營業資訊符合預計時段的目錄店家；可搜尋並確認營業時間與菜單</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`
+            ? `<tr class="meal-missing-row"><th>${meal.label}推薦不足 5 家</th><td colspan="3">目錄中符合餐別的店家不足；可搜尋確認餐點和營業狀況</td><td><a href="${fallbackUrl}" target="_blank" rel="noopener">搜尋 ↗</a></td></tr>`
             : "";
           return `<tr class="meal-section-row"><th colspan="5">${meal.label}（預計 ${item.foods?.[meal.key]?.time || "—"}）推薦 ${foods.length}/5</th></tr>${recommendations}${missingRows}`;
         }).join("");
@@ -3252,7 +3284,7 @@
     const needsLine = details.needs ? `<span>需求：${escapeHtml(details.needs.slice(0, 90))}</span>` : `<span>偏好：${escapeHtml(prefText || "未指定")}</span>`;
     const loadingDirectory = options.loadingData ? `<p class="plan-progress">正在載入推薦美食與附近景點…</p>` : "";
     const directoryNotice = options.directoryError ? `<p class="plan-warning">部分官方美食或景點目錄暫時無法載入，其他行程資訊仍可查看。</p>` : "";
-    const mealNotice = `<p class="form-disclaimer">餐飲名單依預計用餐時間和登錄營業時段篩選；營業時間未提供者會標示待確認。目錄未提供菜單，也未指定旅遊日期，請確認當日營業和餐點。</p>`;
+    const mealNotice = `<p class="form-disclaimer">三餐清單會依餐點類型篩選，冰品、甜點和飲料店不列入正餐；早餐優先列早餐店、早午餐和常見早餐餐點。營業時段與菜單仍請出發前確認。</p>`;
     const routeNotice = options.routeStatus === "loading" && !options.loadingData
       ? `<p class="plan-progress">正在計算行車里程與時間…</p>`
       : options.routeStatus === "unavailable" ? `<p class="plan-warning">道路距離服務暫不可用；可開啟導航查看即時路線與時間。行車資料由 <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> 依 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 道路網估算，不含即時路況。</p>`
